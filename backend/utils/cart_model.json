@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "max_depth": 5,
+    "min_samples_split": 4,
+    "min_samples_leaf": 2,
+    "features": [
+      "success_rate",
+      "avg_attempts",
+      "avg_time_spent",
+      "syntax_errors",
+      "structural_errors"
+    ],
+    "trained_at": "2026-05-30T07:02:42.218Z"
+  },
+  "tree": {
+    "leaf": false,
+    "feature": "success_rate",
+    "threshold": 0.475,
+    "gini": 0.31746031746031744,
+    "samples": 28,
+    "left": {
+      "leaf": true,
+      "label": "Easy",
+      "samples": 10,
+      "distribution": {
+        "Easy": 10
+      }
+    },
+    "right": {
+      "leaf": false,
+      "feature": "success_rate",
+      "threshold": 0.79,
+      "gini": 0,
+      "samples": 18,
+      "left": {
+        "leaf": true,
+        "label": "Intermediate",
+        "samples": 10,
+        "distribution": {
+          "Intermediate": 10
+        }
+      },
+      "right": {
+        "leaf": true,
+        "label": "Hard",
+        "samples": 8,
+        "distribution": {
+          "Hard": 8
+        }
+      }
+    }
+  }
+}

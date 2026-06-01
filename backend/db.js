@@ -1,16 +1,15 @@
 // db.js
+require('dotenv').config();
 const mysql = require('mysql2');
 
-// Use a pool (better than single connection)
 const db = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: 'root', // change if you have one
-  database: 'codapt_system',
+  host:     process.env.DB_HOST || 'localhost',
+  user:     process.env.DB_USER || 'root',
+  password: process.env.DB_PASS || 'root',
+  database: process.env.DB_NAME || 'codapt_system',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 });
-console.log('DB PASS:', process.env.DB_PASSWORD);
 
-module.exports = db.promise(); 
+module.exports = db.promise();

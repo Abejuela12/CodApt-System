@@ -38,15 +38,7 @@ export const calculateLanguageProgress = (language, progress = {}) => {
   };
 };
 
-const getHintLevel = () => {
-  if (attempts >= 3) return 3;
 
-  if (userLevel === "Beginner") return Math.min(hintLevel + 1, 3);
-  if (userLevel === "Intermediate") return Math.min(hintLevel + 0.7, 3);
-  if (userLevel === "Advanced") return Math.min(hintLevel + 0.5, 3);
-
-  return hintLevel;
-};
 
 
 // ✅ Get overall level per language

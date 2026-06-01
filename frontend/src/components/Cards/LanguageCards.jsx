@@ -1,46 +1,115 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styles from './LanguageCards.module.css';
 import ThemeToggle from '../shared/ThemeToggle';
 import LanguageFlipCard from "./LanguageFlipCard";
 
-const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHomeClick, onLogout, userData }) => {
-  const [selectedLang, setSelectedLang] = useState(null);
+// Evolution chains per language
+// Beginner → Intermediate → Advanced
+const EVOLUTIONS = {
+  Java: [
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png',
+      label:       'Charmander',
+      hp:          60,
+      description: 'A beginner Java coder — small flame, big dreams. Still learning to compile without errors.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png',
+      label:       'Charmeleon',
+      hp:          90,
+      description: 'An intermediate Java developer — the flame burns hotter. OOP concepts and logic are clicking.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png',
+      label:       'Charizard',
+      hp:          120,
+      description: 'A Java master — commands the JVM with fire and fury. Enterprise systems fear this coder.',
+    },
+  ],
+  Python: [
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/23.png',
+      label:       'Ekans',
+      hp:          45,
+      description: 'A beginner Python coder — small and coiling. Just starting to wrap their head around syntax.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/24.png',
+      label:       'Arbok',
+      hp:          80,
+      description: 'An intermediate Python dev — the snake grows stronger. Functions and data structures are in their grasp.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/497.png',
+      label:       'Serperior',
+      hp:          115,
+      description: 'A Python master — elegant and powerful. Scripts data pipelines and AI models with regal precision.',
+    },
+  ],
+  JavaScript: [
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/172.png',
+      label:       'Pichu',
+      hp:          40,
+      description: 'A beginner JS coder — tiny sparks of logic. Still getting zapped by undefined errors.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png',
+      label:       'Pikachu',
+      hp:          75,
+      description: 'An intermediate JS developer — the shocks are real now. Async functions and DOM events are no problem.',
+    },
+    {
+      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png',
+      label:       'Raichu',
+      hp:          110,
+      description: 'A JavaScript master — thunderous and fast. Builds full-stack apps and frameworks with pure electric power.',
+    },
+  ],
+};
 
-  const handleCardClick = (lang) => {
-    setSelectedLang(lang);
-    setShowModal(true);
-  };
+const CONCEPTS = ['Variables','Data Types','Operators','Conditional',
+                  'Loops','Functions','Input & Output','Error Handling'];
 
-  const handleLevelSelect = (level) => {
-    setShowModal(false);
+// Same capability logic as ProfilePage
+function getLanguageCapability(language, progress = {}) {
+  const langData  = progress[language] || {};
+  const attempted = CONCEPTS.filter(c => langData[c] && (langData[c]?.tasksCompleted ?? 0) > 0);
+  if (attempted.length === 0) return 'Beginner';
 
-    // send the selected language to App.jsx
-    onSelect(selectedLang);
-  };
+  const mastered   = attempted.filter(c => (langData[c]?.successRate ?? 0) >= 80);
+  const avgSuccess = attempted.reduce((sum, c) => sum + (langData[c]?.successRate ?? 0), 0) / attempted.length;
 
+  if (mastered.length >= 4 && avgSuccess >= 80) return 'Advanced';
+  if (attempted.length >= 2 && avgSuccess >= 50) return 'Intermediate';
+  return 'Beginner';
+}
+
+// Returns the correct pokemon image and label based on user level
+function getEvolution(language, progress) {
+  const level = getLanguageCapability(language, progress);
+  const chain = EVOLUTIONS[language];
+  if (level === 'Advanced')     return chain[2];
+  if (level === 'Intermediate') return chain[1];
+  return chain[0];
+}
+
+const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHomeClick, onLogout, userData, progress = {} }) => {
   return (
     <div className={styles.container}>
       {/* Navbar */}
       <nav className={styles.navbar}>
-        <img 
-          src="/CODAPT_LOGO.png" 
-          alt="Codapt" 
+        <img
+          src="/CODAPT_LOGO.png"
+          alt="Codapt"
           className={styles.logo}
           onClick={onHomeClick}
         />
-        
         <div className={styles.navActions}>
-          {/* Name Badge */}
           <div className={styles.nameBadge}>
             {userData?.name || 'Name'}
           </div>
-          
-          <ThemeToggle 
-            isDarkMode={isDarkMode} 
-            onClick={toggleTheme}
-          />
-          
-          {/* Profile Icon with Photo */}
+          <ThemeToggle isDarkMode={isDarkMode} onClick={toggleTheme} />
           <div className={styles.profileWrapper}>
             <div className={styles.profileIcon} onClick={onProfileClick}>
               {userData?.photo ? (
@@ -52,12 +121,10 @@ const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHo
                 </svg>
               )}
             </div>
-            
-            {/* Unified Dropdown */}
             <div className="unifiedDropdown">
               <div className="dropdownArrow"></div>
               <div className="dropdownItem" onClick={(e) => { e.stopPropagation(); onProfileClick(); }}>Profile</div>
-              <div className="dropdownItem" onClick={(e) => { e.stopPropagation(); onLogout(); }}>Log Out</div>
+              <div className="dropdownItem dropdownItemDanger" onClick={(e) => { e.stopPropagation(); onLogout(); }}>Log Out</div>
             </div>
           </div>
         </div>
@@ -66,51 +133,52 @@ const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHo
       {/* Main Content */}
       <main className={styles.content}>
         <h1 className={styles.title}>Programming Languages</h1>
-  
- 
+
         <div className={styles.cardGrid}>
 
-        <LanguageFlipCard
-          name="Java"
-          hp="120"
-          type="Fire"
-          color="#FF6700" // orange/red for Java
-          image="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png"
-          ability1={{ name:"Flame Compile", damage:40, desc:"Burn through compilation." }}
-          ability2={{ name:"JVM Blast", damage:80, desc:"Virtual machine attack." }}
-          description="Powerful enterprise language used in large backend systems."
-          onClick={() => onSelect("Java")}
-        />
+          <LanguageFlipCard
+            name="Java"
+            hp={getEvolution('Java', progress).hp}
+            type="Fire"
+            color="#FF6700"
+            image={getEvolution('Java', progress).pokemon}
+            evolutionLabel={getEvolution('Java', progress).label}
+            userLevel={getLanguageCapability('Java', progress)}
+            ability1={{ name:"Flame Compile", damage:40, desc:"Burn through compilation." }}
+            ability2={{ name:"JVM Blast",     damage:80, desc:"Virtual machine attack."  }}
+            description={getEvolution('Java', progress).description}
+            onClick={() => onSelect("Java")}
+          />
 
-        <LanguageFlipCard
-          name="Python"
-          hp="100"
-          type="Grass"
-          color="#4B8BBE" // blue for Python
-          image="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/23.png"
-          ability1={{ name:"Script Coil", damage:30, desc:"Wrap opponents elegantly." }}
-          ability2={{ name:"Data Bite", damage:70, desc:"Process massive datasets instantly." }}
-          description="Flexible snake language loved by AI and data scientists."
-          onClick={() => onSelect("Python")}
-        />
+          <LanguageFlipCard
+            name="Python"
+            hp={getEvolution('Python', progress).hp}
+            type="Grass"
+            color="#4B8BBE"
+            image={getEvolution('Python', progress).pokemon}
+            evolutionLabel={getEvolution('Python', progress).label}
+            userLevel={getLanguageCapability('Python', progress)}
+            ability1={{ name:"Script Coil", damage:30, desc:"Wrap opponents elegantly."           }}
+            ability2={{ name:"Data Bite",   damage:70, desc:"Process massive datasets instantly." }}
+            description={getEvolution('Python', progress).description}
+            onClick={() => onSelect("Python")}
+          />
 
-        <LanguageFlipCard
-          name="JavaScript"
-          hp="90"
-          type="Electric"
-          color="#F7DF1E" // yellow for JS
-          image="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png"
-          ability1={{ name:"Dynamic Shock", damage:30, desc:"Shock enemies with dynamic typing." }}
-          ability2={{ name:"Async Thunder", damage:80, desc:"Async lightning strike." }}
-          description="King of the web powering interactive websites."
-          onClick={() => onSelect("JavaScript")}
-        />
-
-
+          <LanguageFlipCard
+            name="JavaScript"
+            hp={getEvolution('JavaScript', progress).hp}
+            type="Electric"
+            color="#F7DF1E"
+            image={getEvolution('JavaScript', progress).pokemon}
+            evolutionLabel={getEvolution('JavaScript', progress).label}
+            userLevel={getLanguageCapability('JavaScript', progress)}
+            ability1={{ name:"Dynamic Shock", damage:30, desc:"Shock enemies with dynamic typing." }}
+            ability2={{ name:"Async Thunder", damage:80, desc:"Async lightning strike."            }}
+            description={getEvolution('JavaScript', progress).description}
+            onClick={() => onSelect("JavaScript")}
+          />
 
         </div>
-
-
       </main>
     </div>
   );

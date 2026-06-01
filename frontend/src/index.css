@@ -3,7 +3,6 @@
    CSS VARIABLES FOR DARK/LIGHT MODE
    ============================================ */
 
-/* Light Mode (Default) */
 :root {
   --bg-primary: #89CFF0;
   --bg-navbar: #ffffff;
@@ -14,12 +13,9 @@
   --border-color: #0d2a6b;
   --modal-bg: #1e4baf;
   --modal-border: #0d2a6b;
-
-    --footer-bg: #1e3a5f; 
-
+  --footer-bg: #1e3a5f;
 }
 
-/* Dark Mode */
 [data-theme="dark"] {
   --bg-primary: #1a1a2e;
   --bg-navbar: #16213e;
@@ -30,17 +26,13 @@
   --border-color: #3366cc;
   --modal-bg: #0d2a6b;
   --modal-border: #3366cc;
-
-    --footer-bg: #16213e;
-
+  --footer-bg: #16213e;
 }
-
 
 /* ============================================
    LANDING PAGE DARK/LIGHT MODE
    ============================================ */
 
-/* Light Mode */
 :root,
 [data-theme="light"] {
   --navbar-bg: #ffffff;
@@ -49,7 +41,6 @@
   --subtitle-color: #2b4c7e;
 }
 
-/* Dark Mode */
 [data-theme="dark"] {
   --navbar-bg: #111727;
   --navbar-border: #1e2d4a;
@@ -57,30 +48,19 @@
   --subtitle-color: #a0aec0;
 }
 
-
 /* ============================================
-   REST OF YOUR CSS
+   CUSTOM SCROLLBAR
    ============================================ */
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #0d1117; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
-::-webkit-scrollbar-track {
-  background: #0d1117;
-}
+/* ============================================
+   BASE
+   ============================================ */
 
-::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
-}
-
-/* Full viewport */
 html, body, #root {
   height: 100%;
   margin: 0;
@@ -104,33 +84,35 @@ body {
   font-style: normal;
 }
 
-body,
-#root,
-.App {
+body, #root, .App {
   background-color: var(--bg-primary);
 }
 
 /* ============================================
-   UNIFIED DROPDOWN STYLES - ALL COMPONENTS
+   UNIFIED DROPDOWN — CONSISTENT ACROSS ALL PAGES
    ============================================ */
 
-/* Common dropdown base */
 .unifiedDropdown {
   position: absolute !important;
-  top: 100% !important;
+  top: calc(100% + 10px) !important;
   right: 0 !important;
-  background: linear-gradient(145deg, #1e4baf, #16213e) !important;
+
+  background: #1a2f5e !important;
   border-radius: 12px !important;
-  min-width: 120px !important;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.4) !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+  min-width: 110px !important;
+
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2) !important;
+
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   overflow: hidden;
   z-index: 1000 !important;
-  margin-top: 8px !important;
+
   opacity: 0;
   visibility: hidden;
-  transform: translateY(10px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transform: translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease !important;
 }
 
 /* Show on hover */
@@ -141,29 +123,38 @@ div:hover > .unifiedDropdown {
   transform: translateY(0) !important;
 }
 
-/* Dropdown arrow */
+/* Dropdown arrow pointer */
 .dropdownArrow {
   position: absolute !important;
   top: -8px !important;
-  right: 18px !important;
-  width: 0;
-  height: 0;
-  border-left: 10px solid transparent;
-  border-right: 10px solid transparent;
-  border-bottom: 10px solid #1e4baf;
-  z-index: 1;
+  right: 10px !important;
+  width: 0 !important;
+  height: 0 !important;
+  border-left: 8px solid transparent !important;
+  border-right: 8px solid transparent !important;
+  border-bottom: 8px solid #1a2f5e !important;
+  background: none !important;
+  z-index: 3 !important;
+}
+
+[data-theme="dark"] .dropdownArrow {
+  border-bottom-color: #0f1c3a !important;
 }
 
 /* Dropdown items */
 .dropdownItem {
-  padding: 12px 16px !important;
-  color: #e2e8f0 !important;
-  text-decoration: none !important;
-  display: block !important;
-  font-size: 14px !important;
-  font-weight: 500 !important;
-  transition: all 0.2s ease !important;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 9px 14px !important;
+  color: #cbd5e1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  user-select: none;
 }
 
 .dropdownItem:last-child {
@@ -171,50 +162,65 @@ div:hover > .unifiedDropdown {
 }
 
 .dropdownItem:hover {
-  background: rgba(255,255,255,0.15) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
   color: #ffffff !important;
   padding-left: 20px !important;
 }
 
-/* Dark mode adjustments */
+/* Danger item (Log Out) */
+.dropdownItemDanger {
+  color: #fca5a5 !important;
+}
+
+.dropdownItemDanger:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #f87171 !important;
+}
+
+/* Dark mode */
 [data-theme="dark"] .unifiedDropdown {
-  background: linear-gradient(145deg, #16213e, #1e293b) !important;
+  background: #0f1c3a !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
 }
 
 [data-theme="dark"] .dropdownArrow {
-  border-bottom-color: #16213e !important;
+  border-bottom-color: #0f1c3a !important;
 }
 
 /* ============================================
-   PROFILE ICON - DARK MODE FIX
+   PROFILE ICON STYLES
    ============================================ */
 
-/* All profile icons */
 .profileIcon,
 .profileWrapper > div {
   background: #ffffff !important;
-  border: 2px solid #333 !important;
+  border: 2px solid #d1d5db !important;
+  transition: border-color 0.2s ease !important;
+}
+
+.profileIcon:hover,
+.profileWrapper > div:hover {
+  border-color: #ffcc00 !important;
 }
 
 [data-theme="dark"] .profileIcon,
 [data-theme="dark"] .profileWrapper > div {
-  background: #2d3748 !important;  /* Dark gray background */
-  border-color: #4a5568 !important; /* Light gray border */
+  background: #2d3748 !important;
+  border-color: #4a5568 !important;
 }
 
-/* Profile photo ensures it stays visible */
 .profilePhoto,
 .profilePhotoLarge {
   border-radius: 50% !important;
 }
 
-/* SVG icons in profile - ensure visibility */
 .profileIcon svg,
 .profileWrapper svg {
-  stroke: #374151 !important; /* Dark gray stroke */
+  stroke: #374151 !important;
 }
 
 [data-theme="dark"] .profileIcon svg,
 [data-theme="dark"] .profileWrapper svg {
-  stroke: #e2e8f0 !important; /* Light stroke for dark mode */
+  stroke: #e2e8f0 !important;
 }
