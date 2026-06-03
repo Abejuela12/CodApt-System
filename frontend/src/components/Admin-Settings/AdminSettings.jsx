@@ -1,8 +1,56 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './AdminSettings.module.css';
 import { FaGear, FaFloppyDisk, FaArrowRotateLeft, FaChevronRight } from "react-icons/fa6";
 
-const AdminSettings = () => {
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const AdminSettings = ({ authToken }) => {
+  const [settings, setSettings] = useState({
+    recommendationEngine: true,
+    cfgValidation: true,
+    hardcodedDetection: true
+  });
+
+  useEffect(() => {
+    if (!authToken) return;
+    fetch(`${API_BASE}/api/admin/settings`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const loaded = data?.data || data?.settings || data || {};
+        const normalize = (value, defaultValue = true) => {
+          if (value === undefined || value === null) return defaultValue;
+          return String(value) !== 'false';
+        };
+
+        setSettings({
+          recommendationEngine: normalize(loaded.recommendationEngine, true),
+          cfgValidation: normalize(loaded.cfgValidation, true),
+          hardcodedDetection: normalize(loaded.hardcodedDetection, true)
+        });
+      })
+      .catch((err) => console.error('Failed to load settings', err));
+  }, [authToken]);
+
+  const updateSetting = async (key, value) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    if (!authToken) return;
+
+    try {
+      await fetch(`${API_BASE}/api/admin/settings`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ [key]: value })
+      });
+    } catch (err) {
+      console.error('Failed to save setting', err);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Settings</h1>
@@ -19,7 +67,7 @@ const AdminSettings = () => {
             <p>Enable adaptive learning recommendations for students.</p>
           </div>
           <label className={styles.switch}>
-            <input type="checkbox" defaultChecked />
+            <input type="checkbox" checked={settings.recommendationEngine} onChange={(e) => updateSetting('recommendationEngine', e.target.checked)} />
             <span className={styles.slider}></span>
           </label>
         </div>
@@ -30,7 +78,7 @@ const AdminSettings = () => {
             <p>Enable Context-Free Grammar checking for code exercises.</p>
           </div>
           <label className={styles.switch}>
-            <input type="checkbox" defaultChecked />
+            <input type="checkbox" checked={settings.cfgValidation} onChange={(e) => updateSetting('cfgValidation', e.target.checked)} />
             <span className={styles.slider}></span>
           </label>
         </div>
@@ -41,7 +89,7 @@ const AdminSettings = () => {
             <p>Detect hardcoded outputs in programming submissions.</p>
           </div>
           <label className={styles.switch}>
-            <input type="checkbox" defaultChecked />
+            <input type="checkbox" checked={settings.hardcodedDetection} onChange={(e) => updateSetting('hardcodedDetection', e.target.checked)} />
             <span className={styles.slider}></span>
           </label>
         </div>

@@ -1,24 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AdminDashboard.module.css';
 import UsersPanel from '../Admin-Users/AdminUsers';
 import AdminReports from '../Admin-Reports/AdminReports';
 import AdminSettings from '../Admin-Settings/AdminSettings';
 import AdminCourses from '../Admin-Courses/AdminCourses';
 
-const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [stats, setStats]             = useState({
+    totalUsers: 0,
+    activeUsers: 0,
+    bannedUsers: 0,
+    totalLessons: 0,
+    completedSubmissions: 0,
+    recentUsers: []
+  });
 
   const handleNavClick = (view) => {
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const users = [
-    { name: 'Marian R', progress: 74, color: '#66CC99' },
-    { name: 'Samantha V', progress: 32, color: '#D4AF37' },
-    { name: 'Ana L', progress: 61, color: '#66CC99' },
-    { name: 'Mark N', progress: 73, color: '#66CC99' },
-  ];
+  useEffect(() => {
+    if (!authToken) return;
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/stats`, {
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setStats(data);
+        }
+      } catch (err) {
+        console.error('Failed to load admin stats', err);
+      }
+    };
+    fetchStats();
+  }, [authToken]);
+
+  const recentUsers = stats.recentUsers || [];
 
   return (
     <div className={styles.container}>
@@ -82,21 +105,21 @@ const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
                   <div className={styles.statContent}>
                     <span className={styles.statEmoji}>📚</span>
                     <p>Total Learners</p>
-                    <h3>1,562</h3>
+                    <h3>{stats.totalUsers ?? 0}</h3>
                   </div>
                 </div>
                 <div className={styles.statCard}>
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>📈</span>
                         <p>Avg Score</p>
-                        <h3>30%</h3>
+                        <h3>{stats.totalUsers > 0 ? `${Math.round((stats.completedSubmissions || 0) / stats.totalUsers)}%` : '0%'}</h3>
                     </div>
                 </div>
                 <div className={styles.statCard}>
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>✅</span>
                         <p>Average Progress</p>
-                        <h3>74%</h3>
+                        <h3>{stats.totalLessons > 0 ? `${Math.round(((stats.completedSubmissions || 0) / stats.totalLessons) * 100)}%` : '0%'}</h3>
                     </div>
                 </div>
               </div>
@@ -109,25 +132,34 @@ const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
                     <span>Progress</span>
                   </div>
 
-                  {users.map((user, index) => (
-                    <div key={index} className={styles.userRow}>
-                      <div className={styles.userInfo}>
-                        <div className={styles.avatar} style={{backgroundColor: user.color}}>
-                            {user.name[0]}
+                  {recentUsers.length > 0 ? (
+                    recentUsers.map((user) => {
+                      const progress = user.completed_lessons ? Math.min(user.completed_lessons * 10, 100) : 0;
+                      return (
+                        <div key={user.id} className={styles.userRow}>
+                          <div className={styles.userInfo}>
+                            <div className={styles.avatar} style={{backgroundColor: '#38BDF8'}}>
+                              {user.name?.charAt(0) || 'U'}
+                            </div>
+                            <span className={styles.userName}>{user.name}</span>
+                          </div>
+                          <div className={styles.progressWrapper}>
+                            <div className={styles.progressBar}>
+                              <div 
+                                className={styles.progressFill} 
+                                style={{ width: `${progress}%`, backgroundColor: '#38BDF8' }}
+                              ></div>
+                            </div>
+                            <span className={styles.progressVal}>{progress}%</span>
+                          </div>
                         </div>
-                        <span className={styles.userName}>{user.name}</span>
-                      </div>
-                      <div className={styles.progressWrapper}>
-                        <div className={styles.progressBar}>
-                          <div 
-                            className={styles.progressFill} 
-                            style={{ width: `${user.progress}%`, backgroundColor: user.color }}
-                          ></div>
-                        </div>
-                        <span className={styles.progressVal}>{user.progress}%</span>
-                      </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ color: '#94a3b8', padding: '24px', textAlign: 'center' }}>
+                      No recent user activity available.
                     </div>
-                  ))}
+                  )}
                 </div>
                 <div className={styles.actionArea}>
                     <button className={styles.viewAllBtn} onClick={() => handleNavClick('users')}>View All Users</button>
@@ -136,10 +168,10 @@ const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
             </>
           )}
 
-          {currentView === 'users' && <UsersPanel />}
+          {currentView === 'users' && <UsersPanel authToken={authToken} />}
           {currentView === 'reports' && <AdminReports />}
           {currentView === 'content' && <AdminCourses />}
-          {currentView === 'settings' && <AdminSettings />}
+          {currentView === 'settings' && <AdminSettings authToken={authToken} />}
         </div>
       </main>
     </div>

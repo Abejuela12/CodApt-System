@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import Split from 'react-split';
 import './Split.css';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 import { calculateLanguageProgress, getLanguageLevel } from "../../utils/levelUtils";
 import { getHintLevel } from "../../utils/hintUtils";
 import { recommendNextTask } from "../../utils/recommendNextTask";
@@ -117,7 +118,7 @@ const CodeEditor = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [attempts, setAttempts]         = useState(0);
-  const [startTime]                     = useState(Date.now());
+  const [startTime, setStartTime]       = useState(Date.now());
   const [timeSpent, setTimeSpent]       = useState(0);
   const [hintLevel, setHintLevel]       = useState(0);
   const [hintUsed, setHintUsed] = useState(false);
@@ -168,7 +169,7 @@ const CodeEditor = ({
     setOutput('⏳ Running...');
 
     try {
-      const res  = await fetch('http://localhost:5000/api/run', {
+      const res  = await fetch(`${API_BASE}/api/run`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ language, code })
@@ -193,7 +194,7 @@ const CodeEditor = ({
 
     try {
       setOutput('⏳ Running your code...');
-      const runRes  = await fetch('http://localhost:5000/api/run', {
+      const runRes  = await fetch(`${API_BASE}/api/run`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ language, code })
@@ -227,7 +228,7 @@ const CodeEditor = ({
       const actual    = normalizeOutput(actualOutput);
       const isCorrect = actual === expected;
 
-      const submitRes  = await fetch('http://localhost:5000/api/submit', {
+      const submitRes  = await fetch(`${API_BASE}/api/submit`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -318,7 +319,7 @@ const CodeEditor = ({
     const fetchTasks = async () => {
       try {
         const res = await fetch(
-          `http://localhost:5000/api/problems/${language}/${concept}/${level}?tier=${currentTier}`
+          `${API_BASE}/api/problems/${language}/${concept}/${level}?tier=${currentTier}`
         );
         const data = await res.json();
         setTasks(data);
@@ -331,6 +332,10 @@ const CodeEditor = ({
 
   // ── reset editor when task changes ───────────────────────────
   useEffect(() => {
+    setCurrentTier('Beginner');
+  }, [language, concept, level]);
+
+  useEffect(() => {
     if (!task) return;
     setCode(getStarterCode(language, task));
     setOutput('');
@@ -339,8 +344,8 @@ const CodeEditor = ({
     setShowHint(false);
     setHintLevel(0);
     setHintUsed(false);
-    setCurrentTier('Beginner');
-  }, [currentTaskIndex, tasks, language]);
+    setStartTime(Date.now());
+  }, [task, language]);
 
   const btnBase = {
     padding: '8px 20px', borderRadius: '8px',

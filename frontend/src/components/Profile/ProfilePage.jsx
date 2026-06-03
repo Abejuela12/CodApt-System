@@ -10,7 +10,7 @@ import { getConceptLevel } from '../../utils/levelUtils';
 const LANGUAGES = ['Java', 'Python', 'JavaScript'];
 const CONCEPTS  = ['Variables','Data Types','Operators','Conditional',
                    'Loops','Functions','Input & Output','Error Handling'];
-const API       = 'http://localhost:5000';
+const API_BASE  = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // Language capability — based only on concepts the user actually attempted
 // Advanced: needs 4+ mastered concepts AND avg success >= 80
@@ -58,7 +58,7 @@ const ProfilePage = ({
   const fetchProgress = useCallback(async () => {
     if (!userData?.id) return;
     try {
-      const res  = await fetch(`${API}/api/progress/${userData.id}`);
+      const res  = await fetch(`${API_BASE}/api/progress/${userData.id}`);
       const data = await res.json();
       setProgress(data);
     } catch {}
@@ -67,7 +67,7 @@ const ProfilePage = ({
   const fetchDailyProgress = useCallback(async () => {
     if (!userData?.id) return;
     try {
-      const res  = await fetch(`${API}/api/daily-progress/${userData.id}`);
+      const res  = await fetch(`${API_BASE}/api/daily-progress/${userData.id}`);
       const rows = await res.json();
       if (!Array.isArray(rows) || rows.length === 0) { setChartData([]); setActiveChartLangs([]); return; }
 

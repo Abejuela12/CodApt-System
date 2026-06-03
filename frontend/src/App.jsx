@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LanguageCards from './components/Cards/LanguageCards'; 
 import ConceptModal from './components/Cards/ConceptModal';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 import CodeEditor from './components/CodeEditors/CodeEditor';
 import ProfilePage from './components/Profile/ProfilePage';
 import LandingPage from './components/LandingPage/LandingPage';
@@ -28,6 +29,7 @@ function App() {
   const [selectedConcept, setSelectedConcept] = useState(null);
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authToken, setAuthToken] = useState(null);
 
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
@@ -36,6 +38,81 @@ function App() {
 
   // Progress is tracked in state and updated after each correct submission
   const [progress, setProgress] = useState({});
+
+  useEffect(() => {
+    const token = localStorage.getItem('codapt_token');
+    const storedUser = localStorage.getItem('codapt_user');
+    const storedAdmin = localStorage.getItem('codapt_isAdmin') === 'true';
+
+    if (!token) {
+      return;
+    }
+
+    setAuthToken(token);
+    setIsAdmin(storedAdmin);
+
+    if (storedUser) {
+      try {
+        setUserData(JSON.parse(storedUser));
+      } catch {
+        localStorage.removeItem('codapt_user');
+      }
+    }
+
+    if (storedAdmin) {
+      setCurrentPage('admin');
+      return;
+    }
+
+    fetch(`${API_BASE}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Session invalid');
+        return res.json();
+      })
+      .then((body) => {
+        if (body?.success && body.user) {
+          setUserData(body.user);
+          setCurrentPage('languages');
+          loadUserProgress(body.user.id);
+        } else {
+          throw new Error('Session invalid');
+        }
+      })
+      .catch(() => {
+        handleLogout();
+      });
+  }, []);
+
+  useEffect(() => {
+    if (authToken) {
+      localStorage.setItem('codapt_token', authToken);
+      localStorage.setItem('codapt_isAdmin', isAdmin ? 'true' : 'false');
+    } else {
+      localStorage.removeItem('codapt_token');
+      localStorage.removeItem('codapt_isAdmin');
+    }
+  }, [authToken, isAdmin]);
+
+  useEffect(() => {
+    if (userData?.id) {
+      localStorage.setItem('codapt_user', JSON.stringify(userData));
+    } else {
+      localStorage.removeItem('codapt_user');
+    }
+  }, [userData]);
+
+  const loadUserProgress = async (userId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/progress/${userId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setProgress(data);
+    } catch (err) {
+      // ignore progress load failures
+    }
+  };
 
   // Apply dark/light theme to <html>
   useEffect(() => {
@@ -74,10 +151,13 @@ function App() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/auth/profile/${userData.id}`,
+        `${API_BASE}/api/auth/profile/${userData.id}`,
         {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+          },
           body:    JSON.stringify(formData)
         }
       );
@@ -95,6 +175,7 @@ function App() {
 
   const handleLogout = () => {
     setIsAdmin(false);
+    setAuthToken(null);
     setUserData(EMPTY_USER);
     setProgress({});
     setSelectedLang(null);
@@ -115,21 +196,32 @@ function App() {
   // ── Auth handlers ───────────────────────────────────────────────
 
   // SignUp passes the user object returned by POST /api/auth/register
-  const handleSignUp = (user) => {
-    setUserData(user);   // user.id is the real DB id
+  const handleAuthSuccess = ({ user, token, isAdmin = false }) => {
+    setUserData(user);
+    setAuthToken(token || null);
+    setIsAdmin(isAdmin);
+    if (isAdmin) {
+      goToAdmin();
+      return;
+    }
     goToLanguages();
+    if (user?.id) {
+      loadUserProgress(user.id);
+    }
+  };
+
+  const handleSignUp = (user) => {
+    handleAuthSuccess({ user, token: user.token, isAdmin: false });
   };
 
   // Login passes the user object returned by POST /api/auth/login
   // OR { isAdmin: true } for the admin shortcut
   const handleLogin = (loginData) => {
     if (loginData?.isAdmin) {
-      setIsAdmin(true);
-      goToAdmin();
+      handleAuthSuccess({ user: loginData.user, token: loginData.token, isAdmin: true });
       return;
     }
-    setUserData(loginData);  // loginData.id is the real DB id
-    goToLanguages();
+    handleAuthSuccess({ user: loginData, token: loginData.token, isAdmin: false });
   };
 
   // ── Page routing ────────────────────────────────────────────────
@@ -174,6 +266,7 @@ function App() {
       <AdminDashboard
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
+        authToken={authToken}
       />
     );
   }

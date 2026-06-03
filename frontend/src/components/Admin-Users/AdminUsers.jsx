@@ -1,20 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AdminUsers.module.css';
 
-const UsersPanel = () => {
-  const [users, setUsers] = useState([
-    { id: 1, name: "Marian R", email: "marian@gmail.com", progress: 74, color: "#76D7A4", enrolledDate: "2024-01-15", lastActive: "2024-03-20", scores: { python: 85, javascript: 78, java: 92 }, completedLessons: 45, certificates: 3, isBanned: false },
-    { id: 2, name: "Samantha V", email: "sam@gmail.com", progress: 32, color: "#F1C40F", enrolledDate: "2024-02-01", lastActive: "2024-03-18", scores: { python: 45, javascript: 52, java: 38 }, completedLessons: 18, certificates: 1, isBanned: false },
-    { id: 3, name: "Ana L", email: "ana@gmail.com", progress: 61, color: "#76D7A4", enrolledDate: "2024-01-20", lastActive: "2024-03-19", scores: { python: 72, javascript: 68, java: 75 }, completedLessons: 38, certificates: 2, isBanned: false },
-    { id: 4, name: "Mark N", email: "mark@gmail.com", progress: 73, color: "#76D7A4", enrolledDate: "2024-01-10", lastActive: "2024-03-20", scores: { python: 88, javascript: 82, java: 79 }, completedLessons: 42, certificates: 3, isBanned: false },
-    { id: 5, name: "Wynona K", email: "Wyn@gmail.com", progress: 41, color: "#F1C40F", enrolledDate: "2024-02-05", lastActive: "2024-03-15", scores: { python: 55, javascript: 48, java: 52 }, completedLessons: 22, certificates: 1, isBanned: false },
-    { id: 6, name: "Rainier P", email: "rainier@gmail.com", progress: 19, color: "#E74C3C", enrolledDate: "2024-02-10", lastActive: "2024-03-10", scores: { python: 28, javascript: 22, java: 25 }, completedLessons: 8, certificates: 0, isBanned: true },
-    { id: 7, name: "Catherine S", email: "cath@gmail.com", progress: 52, color: "#76D7A4", enrolledDate: "2024-01-25", lastActive: "2024-03-17", scores: { python: 65, javascript: 58, java: 62 }, completedLessons: 30, certificates: 2, isBanned: false },
-    { id: 8, name: "Donn T", email: "don@gmail.com", progress: 55, color: "#76D7A4", enrolledDate: "2024-01-18", lastActive: "2024-03-19", scores: { python: 68, javascript: 72, java: 58 }, completedLessons: 32, certificates: 2, isBanned: false },
-    { id: 9, name: "Javier Q", email: "javier@gmail.com", progress: 30, color: "#F1C40F", enrolledDate: "2024-02-08", lastActive: "2024-03-14", scores: { python: 42, javascript: 35, java: 40 }, completedLessons: 16, certificates: 0, isBanned: false },
-    { id: 10, name: "Selena O", email: "selena@gmail.com", progress: 39, color: "#F1C40F", enrolledDate: "2024-02-03", lastActive: "2024-03-16", scores: { python: 48, javascript: 52, java: 45 }, completedLessons: 20, certificates: 1, isBanned: false },
-    { id: 11, name: "Hazel M", email: "hazel@gmail.com", progress: 53, color: "#76D7A4", enrolledDate: "2024-01-22", lastActive: "2024-03-18", scores: { python: 62, javascript: 58, java: 65 }, completedLessons: 31, certificates: 2, isBanned: false },
-  ]);
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const UsersPanel = ({ authToken }) => {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!authToken) return;
+    setLoading(true);
+    fetch(`${API_BASE}/api/admin/users`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const rawUsers = Array.isArray(data)
+          ? data
+          : Array.isArray(data.users)
+            ? data.users
+            : Array.isArray(data.data)
+              ? data.data
+              : null;
+
+        if (!Array.isArray(rawUsers)) {
+          setUsers([]);
+          setError(data.error || 'Unable to load users.');
+          return;
+        }
+
+        const palette = ['#66CC99', '#D4AF37', '#8B5CF6', '#38BDF8', '#F97316', '#22D3EE'];
+        setUsers(rawUsers.map((user) => {
+          const color = palette[user.id % palette.length];
+          return {
+            ...user,
+            progress: user.avg_success ?? 0,
+            isBanned: user.status === 'banned',
+            enrolledDate: user.created_at ? user.created_at.split('T')[0] : '',
+            lastActive: user.last_login ? user.last_login.split('T')[0] : '',
+            completedLessons: user.completed_lessons ?? 0,
+            certificates: user.certificates ?? 0,
+            scores: user.scores || { python: 0, javascript: 0, java: 0 },
+            color,
+          };
+        }));
+        setError('');
+      })
+      .catch((err) => {
+        console.error('Failed to load users', err);
+        setError('Failed to load users.');
+      })
+      .finally(() => setLoading(false));
+  }, [authToken]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -38,12 +76,31 @@ const UsersPanel = () => {
     setShowEditModal(true);
   };
 
-  const saveEdit = () => {
-    setUsers(users.map(u => 
-      u.id === selectedUser.id ? { ...u, name: editForm.name, email: editForm.email } : u
-    ));
-    setSelectedUser({ ...selectedUser, name: editForm.name, email: editForm.email });
-    setShowEditModal(false);
+  const saveEdit = async () => {
+    if (!selectedUser) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ name: editForm.name, email: editForm.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Unable to update user');
+      const updatedUser = {
+        ...selectedUser,
+        name: data.user.name,
+        email: data.user.email
+      };
+      setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
+      setSelectedUser(updatedUser);
+      setShowEditModal(false);
+    } catch (err) {
+      console.error('Failed to save user', err);
+      alert('Could not save changes.');
+    }
   };
 
   const openActionModal = (user, action) => {
@@ -52,22 +109,41 @@ const UsersPanel = () => {
     setShowActionModal(true);
   };
 
-  const confirmAction = () => {
-    if (actionType === 'delete') {
-      setUsers(users.filter(u => u.id !== selectedUser.id));
-    } else if (actionType === 'ban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: true } : u
-      ));
-    } else if (actionType === 'unban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: false } : u
-      ));
-    } else if (actionType === 'reset') {
-      alert(`Password reset link sent to ${selectedUser.email}`);
+  const confirmAction = async () => {
+    if (!selectedUser) return;
+
+    try {
+      if (actionType === 'delete') {
+        const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Delete failed');
+        setUsers(users.filter(u => u.id !== selectedUser.id));
+      } else if (actionType === 'ban' || actionType === 'unban') {
+        const status = actionType === 'ban' ? 'banned' : 'active';
+        const res = await fetch(`${API_BASE}/api/admin/users/${selectedUser.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ status })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Status update failed');
+        setUsers(users.map(u => u.id === selectedUser.id ? { ...u, status: data.user.status, isBanned: data.user.status === 'banned' } : u));
+        setSelectedUser({ ...selectedUser, status: data.user.status, isBanned: data.user.status === 'banned' });
+      } else if (actionType === 'reset') {
+        alert(`Password reset link sent to ${selectedUser.email}`);
+      }
+    } catch (err) {
+      console.error('User action failed', err);
+      alert('Unable to perform action.');
+    } finally {
+      setShowActionModal(false);
+      setSelectedUser(null);
     }
-    setShowActionModal(false);
-    setSelectedUser(null);
   };
 
   return (
@@ -91,7 +167,7 @@ const UsersPanel = () => {
         </div>
         <div className={styles.statBox}>
           <span>Active Learners</span>
-          <h2>{Math.round((users.filter(u => !u.isBanned).length / users.length) * 100)}%</h2>
+          <h2>{users.length ? `${Math.round((users.filter(u => !u.isBanned).length / users.length) * 100)}%` : '0%'}</h2>
         </div>
       </div>
 
@@ -113,8 +189,8 @@ const UsersPanel = () => {
             </thead>
             <tbody>
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((user, index) => (
-                  <tr key={index} className={user.isBanned ? styles.bannedRow : ''}>
+                filteredUsers.map((user) => (
+                  <tr key={user.id} className={user.isBanned ? styles.bannedRow : ''}>
                     <td className={styles.userCell}>
                       <div className={styles.avatar} style={{ backgroundColor: user.color }}>
                         {user.name.charAt(0)}
@@ -165,10 +241,10 @@ const UsersPanel = () => {
             
             <div className={styles.userProfileSection}>
               <div className={styles.userAvatarLarge} style={{ backgroundColor: selectedUser.color }}>
-                {selectedUser.name.charAt(0)}
+                {selectedUser?.name?.charAt(0) || 'U'}
               </div>
-              <h3>{selectedUser.name}</h3>
-              <p>{selectedUser.email}</p>
+              <h3>{selectedUser.name || 'Unknown User'}</h3>
+              <p>{selectedUser.email || 'No email'}</p>
               <span className={`${styles.statusBadge} ${selectedUser.isBanned ? styles.bannedStatus : styles.activeStatus}`}>
                 {selectedUser.isBanned ? 'Banned' : 'Active'}
               </span>
@@ -179,7 +255,7 @@ const UsersPanel = () => {
               <div className={styles.progressBarLarge}>
                 <div 
                   className={styles.progressFillLarge} 
-                  style={{ width: `${selectedUser.progress}%`, backgroundColor: selectedUser.color }}
+                  style={{ width: `${selectedUser.progress ?? 0}%`, backgroundColor: selectedUser.color }}
                 ></div>
               </div>
               <p className={styles.progressPercentage}>{selectedUser.progress}% Complete</p>
@@ -190,15 +266,15 @@ const UsersPanel = () => {
               <div className={styles.scoresGrid}>
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>Python</span>
-                  <span className={styles.scoreValue}>{selectedUser.scores.python}</span>
+                  <span className={styles.scoreValue}>{selectedUser?.scores?.python ?? 0}</span>
                 </div>
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>JavaScript</span>
-                  <span className={styles.scoreValue}>{selectedUser.scores.javascript}</span>
+                  <span className={styles.scoreValue}>{selectedUser?.scores?.javascript ?? 0}</span>
                 </div>
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>Java</span>
-                  <span className={styles.scoreValue}>{selectedUser.scores.java}</span>
+                  <span className={styles.scoreValue}>{selectedUser?.scores?.java ?? 0}</span>
                 </div>
               </div>
             </div>

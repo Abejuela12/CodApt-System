@@ -4,6 +4,8 @@ import ThemeToggle from '../shared/ThemeToggle';
 
 const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
   const [formData, setFormData]           = useState({ email: '', password: '' });
   const [error, setError]                 = useState('');
@@ -32,7 +34,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
     setLoading(true);
 
     try {
-      const res  = await fetch('http://localhost:5000/api/auth/login', {
+      const res  = await fetch(`${API_BASE}/api/auth/login`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: formData.email, password: formData.password }),
@@ -44,7 +46,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
         return;
       }
 
-      onLogin(data.user);
+      onLogin({ ...data.user, token: data.token });
     } catch {
       setError('Cannot reach the server. Make sure the backend is running.');
     } finally {
@@ -78,7 +80,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
           });
           const userInfo = await infoRes.json();
 
-          const res  = await fetch('http://localhost:5000/api/auth/google', {
+          const res  = await fetch(`${API_BASE}/api/auth/google`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
@@ -94,7 +96,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
             return;
           }
 
-          onLogin(data.user);
+          onLogin({ ...data.user, token: data.token });
         } catch {
           setError('Something went wrong during Google sign-in.');
         } finally {
@@ -107,16 +109,29 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
   };
 
   /* ── Admin Login ── */
-  const handleAdminSubmit = (e) => {
+  const handleAdminSubmit = async (e) => {
     e.preventDefault();
-    if (
-      adminFormData.email    === 'admin@codapt.com' &&
-      adminFormData.password === 'admin123'
-    ) {
-      setAdminError('');
-      onLogin({ isAdmin: true });
-    } else {
-      setAdminError('Invalid admin credentials.');
+    setAdminError('');
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/admin-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminFormData.email, password: adminFormData.password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAdminError(data.error || 'Invalid admin credentials.');
+        return;
+      }
+
+      onLogin({ isAdmin: true, token: data.token, user: data.user });
+    } catch {
+      setAdminError('Cannot reach the server. Make sure the backend is running.');
+    } finally {
+      setLoading(false);
     }
   };
 

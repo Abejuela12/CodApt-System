@@ -3,6 +3,8 @@ require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
 const crypto     = require('crypto');
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
 const { exec }   = require('child_process');
 const fs         = require('fs');
 const path       = require('path');
@@ -40,11 +42,61 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-/* ─────────────────────────────────────
-   HELPER — SHA-256 password hash
-───────────────────────────────────── */
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + 'codapt_salt').digest('hex');
+const JWT_SECRET = process.env.JWT_SECRET || 'codapt_dev_secret';
+const JWT_EXPIRES_IN = '7d';
+
+async function hashPassword(password) {
+  return bcrypt.hash(password, 10);
+}
+
+async function verifyPassword(password, hash) {
+  if (!hash) return false;
+
+  const isBcrypt = hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+  if (isBcrypt) {
+    return bcrypt.compare(password, hash);
+  }
+
+  const legacyHash = crypto.createHash('sha256').update(password + 'codapt_salt').digest('hex');
+  return legacyHash === hash;
+}
+
+function createAuthToken(user) {
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role || 'student' },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
+
+function sendSuccess(res, message, data = null) {
+  const payload = { success: true, message, data };
+  return res.json(payload);
+}
+
+function sendError(res, status, message, details = null) {
+  const payload = { success: false, message, error: message, data: null };
+  if (details) payload.details = details;
+  return res.status(status).json(payload);
+}
+
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return sendError(res, 401, 'Missing authorization token.');
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return sendError(res, 401, 'Invalid or expired token.');
+    req.user = decoded;
+    next();
+  });
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return sendError(res, 403, 'Admin access required.');
+  }
+  next();
 }
 
 /* ─────────────────────────────────────
@@ -99,8 +151,9 @@ function shouldDemoteToEasy(
 ══════════════════════════════════════ */
 app.post('/api/run', async (req, res) => {
   const { language, code } = req.body;
-  if (!code || !language)
-    return res.status(400).json({ output: 'No code or language provided.', error: true });
+  if (!code || !language) {
+    return sendError(res, 400, 'No code or language provided.', 'Missing code or language');
+  }
 
   const tmpDir = os.tmpdir();
   const lang   = language.toLowerCase();
@@ -124,31 +177,49 @@ app.post('/api/run', async (req, res) => {
       exec(`javac "${filePath}"`, { timeout: 10000 }, (compileErr, _, compileStderr) => {
         if (compileErr) {
           cleanup(filePath);
-          return res.json({ output: compileStderr || 'Compilation error.', error: true });
+          return sendSuccess(res, 'Java compilation failed.', {
+            output: compileStderr || 'Compilation error.',
+            error: true
+          });
         }
         const classPath = tmpDir;
         exec(`java -cp "${classPath}" Main`, { timeout: 10000 }, (runErr, stdout, stderr) => {
           cleanup(filePath);
           cleanup(path.join(tmpDir, 'Main.class'));
-          if (runErr && !stdout)
-            return res.json({ output: stderr || runErr.message, error: true });
-          res.json({ output: stdout.trimEnd(), error: false });
+          if (runErr && !stdout) {
+            return sendSuccess(res, 'Java runtime failed.', {
+              output: stderr || runErr.message,
+              error: true
+            });
+          }
+          sendSuccess(res, 'Java executed successfully.', {
+            output: stdout.trimEnd(),
+            error: false
+          });
         });
       });
 
     } else {
-      res.status(400).json({ output: `Unsupported language: ${language}`, error: true });
+      return sendError(res, 400, `Unsupported language: ${language}`);
     }
   } catch (err) {
-    res.status(500).json({ output: err.message, error: true });
+    return sendError(res, 500, err.message);
   }
 });
 
 function runProcess(command, filePath, res) {
   exec(command, { timeout: 10000 }, (err, stdout, stderr) => {
     cleanup(filePath);
-    if (err && !stdout) return res.json({ output: stderr || err.message, error: true });
-    res.json({ output: stdout.trimEnd(), error: !!stderr });
+    if (err && !stdout) {
+      return sendSuccess(res, 'Execution failed.', {
+        output: stderr || err.message,
+        error: true
+      });
+    }
+    sendSuccess(res, 'Code executed successfully.', {
+      output: stdout.trimEnd(),
+      error: !!stderr
+    });
   });
 }
 
@@ -173,28 +244,28 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, username, email, password, photo } = req.body;
     if (!email || !password)
-      return res.status(400).json({ error: 'Email and password are required.' });
+      return sendError(res, 400, 'Email and password are required.');
 
     const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0)
-      return res.status(409).json({ error: 'An account with this email already exists.' });
+      return sendError(res, 409, 'An account with this email already exists.');
 
-    const hashed          = hashPassword(password);
+    const hashed          = await hashPassword(password);
     const displayName     = name     || email.split('@')[0];
     const displayUsername = username || email.split('@')[0];
 
     const [result] = await db.query(
-      `INSERT INTO users (name, username, email, password_hash, photo) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO users (name, username, email, password_hash, photo, role, status, created_at) VALUES (?, ?, ?, ?, ?, 'student', 'active', NOW())`,
       [displayName, displayUsername, email, hashed, photo || null]
     );
 
-    res.status(201).json({
-      success: true,
-      user: { id: result.insertId, name: displayName, username: displayUsername, email, photo: photo || null }
-    });
+    const user = { id: result.insertId, name: displayName, username: displayUsername, email, photo: photo || null, role: 'student', status: 'active' };
+    const token = createAuthToken(user);
+
+    return sendSuccess(res, 'Registration successful.', { token, user });
   } catch (err) {
     console.error('❌ REGISTER:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to register user.', err.message);
   }
 });
 
@@ -202,32 +273,103 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
-      return res.status(400).json({ error: 'Email and password are required.' });
+      return sendError(res, 400, 'Email and password are required.');
 
-    const hashed = hashPassword(password);
     const [rows] = await db.query(
-      `SELECT id, name, username, email, photo FROM users WHERE email = ? AND password_hash = ?`,
-      [email, hashed]
+      `SELECT id, name, username, email, password_hash, photo, role, status FROM users WHERE email = ?`,
+      [email]
     );
 
     if (rows.length === 0)
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return sendError(res, 401, 'Invalid email or password.');
 
-    const user = rows[0];
-    res.json({ success: true, user: { id: user.id, name: user.name, username: user.username, email: user.email, photo: user.photo || null } });
+    const userRow = rows[0];
+    if (userRow.status === 'banned') {
+      return sendError(res, 403, 'Your account has been banned.');
+    }
+
+    const passwordMatch = await verifyPassword(password, userRow.password_hash);
+    if (!passwordMatch)
+      return sendError(res, 401, 'Invalid email or password.');
+
+    if (!userRow.password_hash.startsWith('$2')) {
+      const upgradedHash = await hashPassword(password);
+      await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [upgradedHash, userRow.id]);
+    }
+
+    await db.query('UPDATE users SET last_login = NOW() WHERE id = ?', [userRow.id]);
+
+    const user = {
+      id: userRow.id,
+      name: userRow.name,
+      username: userRow.username,
+      email: userRow.email,
+      photo: userRow.photo || null,
+      role: userRow.role || 'student',
+      status: userRow.status || 'active'
+    };
+    const token = createAuthToken(user);
+
+    return sendSuccess(res, 'Login successful.', { token, user });
   } catch (err) {
     console.error('❌ LOGIN:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to login.', err.message);
+  }
+});
+
+app.post('/api/auth/admin-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return sendError(res, 400, 'Email and password are required.');
+
+    const [rows] = await db.query(
+      `SELECT id, name, username, email, password_hash, photo, role, status FROM users WHERE email = ?`,
+      [email]
+    );
+    if (rows.length === 0)
+      return sendError(res, 401, 'Invalid admin credentials.');
+
+    const userRow = rows[0];
+    if (userRow.role !== 'admin') {
+      return sendError(res, 403, 'Admin access required.');
+    }
+
+    const passwordMatch = await verifyPassword(password, userRow.password_hash);
+    if (!passwordMatch)
+      return sendError(res, 401, 'Invalid admin credentials.');
+
+    if (!userRow.password_hash.startsWith('$2')) {
+      const upgradedHash = await hashPassword(password);
+      await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [upgradedHash, userRow.id]);
+    }
+
+    await db.query('UPDATE users SET last_login = NOW() WHERE id = ?', [userRow.id]);
+
+    const user = {
+      id: userRow.id,
+      name: userRow.name,
+      username: userRow.username,
+      email: userRow.email,
+      photo: userRow.photo || null,
+      role: 'admin',
+      status: userRow.status || 'active'
+    };
+    const token = createAuthToken(user);
+    return sendSuccess(res, 'Admin login successful.', { token, user });
+  } catch (err) {
+    console.error('❌ ADMIN LOGIN:', err.message);
+    return sendError(res, 500, 'Failed to login as admin.', err.message);
   }
 });
 
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { name, email, photo } = req.body;
-    if (!email) return res.status(400).json({ error: 'Google did not return an email.' });
+    if (!email) return sendError(res, 400, 'Google did not return an email.');
 
     const [existing] = await db.query(
-      `SELECT id, name, username, email, photo FROM users WHERE email = ?`, [email]
+      `SELECT id, name, username, email, photo, role, status FROM users WHERE email = ?`, [email]
     );
 
     if (existing.length > 0) {
@@ -236,24 +378,272 @@ app.post('/api/auth/google', async (req, res) => {
         await db.query('UPDATE users SET photo = ? WHERE id = ?', [photo, user.id]);
         user.photo = photo;
       }
-      return res.json({ success: true, user: { id: user.id, name: user.name, username: user.username, email: user.email, photo: user.photo || null } });
+      await db.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+      const payload = {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        photo: user.photo || null,
+        role: user.role || 'student',
+        status: user.status || 'active'
+      };
+      const token = createAuthToken(payload);
+      return sendSuccess(res, 'Google login successful.', { token, user: payload });
     }
 
     const username = email.split('@')[0];
+    const randomSecret = crypto.randomBytes(24).toString('hex');
+    const passwordHash = await hashPassword(randomSecret);
     const [result] = await db.query(
-      `INSERT INTO users (name, username, email, password_hash, photo) VALUES (?, ?, ?, 'google-oauth', ?)`,
-      [name || username, username, email, photo || null]
+      `INSERT INTO users (name, username, email, password_hash, photo, role, status, created_at, last_login) VALUES (?, ?, ?, ?, ?, 'student', 'active', NOW(), NOW())`,
+      [name || username, username, email, passwordHash, photo || null]
     );
-    res.status(201).json({ success: true, user: { id: result.insertId, name: name || username, username, email, photo: photo || null } });
+
+    const user = {
+      id: result.insertId,
+      name: name || username,
+      username,
+      email,
+      photo: photo || null,
+      role: 'student',
+      status: 'active'
+    };
+    const token = createAuthToken(user);
+    return sendSuccess(res, 'Google registration successful.', { token, user });
   } catch (err) {
     console.error('❌ GOOGLE AUTH:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Google authentication failed.', err.message);
   }
 });
 
-app.put('/api/auth/profile/:userId', async (req, res) => {
+app.get('/api/auth/me', verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, name, username, email, photo, role, status, last_login, created_at FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    if (rows.length === 0) return sendError(res, 404, 'User not found.');
+    return sendSuccess(res, 'Authenticated user loaded.', { user: rows[0] });
+  } catch (err) {
+    console.error('❌ AUTH ME:', err.message);
+    return sendError(res, 500, 'Failed to load authenticated user.', err.message);
+  }
+});
+
+app.get('/api/admin/users', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.username,
+         u.email,
+         u.role,
+         u.status,
+         u.photo,
+         u.created_at,
+         u.last_login,
+         COALESCE(SUM(up.tasks_completed), 0) AS completed_lessons,
+         ROUND(COALESCE(AVG(up.success_rate), 0) * 100) AS avg_success
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       GROUP BY u.id
+       ORDER BY u.created_at DESC`
+    );
+    return sendSuccess(res, 'Admin users fetched.', rows);
+  } catch (err) {
+    console.error('❌ ADMIN GET USERS:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin users.', err.message);
+  }
+});
+
+app.get('/api/admin/users/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
+    const [rows] = await db.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.username,
+         u.email,
+         u.role,
+         u.status,
+         u.photo,
+         u.created_at,
+         u.last_login,
+         COALESCE(SUM(up.tasks_completed), 0) AS completed_lessons,
+         ROUND(COALESCE(AVG(up.success_rate), 0) * 100) AS avg_success
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       WHERE u.id = ?
+       GROUP BY u.id`,
+      [userId]
+    );
+
+    if (rows.length === 0) return sendError(res, 404, 'User not found.');
+    return sendSuccess(res, 'Admin user fetched.', rows[0]);
+  } catch (err) {
+    console.error('❌ ADMIN GET USER:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin user.', err.message);
+  }
+});
+
+app.get('/api/admin/user/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const [rows] = await db.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.username,
+         u.email,
+         u.role,
+         u.status,
+         u.photo,
+         u.created_at,
+         u.last_login,
+         COALESCE(SUM(up.tasks_completed), 0) AS completed_lessons,
+         ROUND(COALESCE(AVG(up.success_rate), 0) * 100) AS avg_success
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       WHERE u.id = ?
+       GROUP BY u.id`,
+      [userId]
+    );
+
+    if (rows.length === 0) return sendError(res, 404, 'User not found.');
+    return sendSuccess(res, 'Admin user fetched.', rows[0]);
+  } catch (err) {
+    console.error('❌ ADMIN GET USER ALIAS:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin user.', err.message);
+  }
+});
+
+app.put('/api/admin/users/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, username, email, role, status } = req.body;
+    const fields = [];
+    const values = [];
+
+    if (name)     { fields.push('name = ?');     values.push(name); }
+    if (username) { fields.push('username = ?'); values.push(username); }
+    if (email)    { fields.push('email = ?');    values.push(email); }
+    if (role)     { fields.push('role = ?');     values.push(role); }
+    if (status)   { fields.push('status = ?');   values.push(status); }
+
+    if (fields.length === 0) return sendError(res, 400, 'No fields to update.');
+
+    values.push(userId);
+    await db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    const [rows] = await db.query(
+      `SELECT id, name, username, email, role, status, photo, created_at, last_login FROM users WHERE id = ?`,
+      [userId]
+    );
+    return sendSuccess(res, 'Admin user updated.', rows[0]);
+  } catch (err) {
+    console.error('❌ ADMIN UPDATE USER:', err.message);
+    return sendError(res, 500, 'Failed to update admin user.', err.message);
+  }
+});
+
+app.delete('/api/admin/users/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await db.query('DELETE FROM users WHERE id = ?', [userId]);
+    return sendSuccess(res, 'Admin user deleted.');
+  } catch (err) {
+    console.error('❌ ADMIN DELETE USER:', err.message);
+    return sendError(res, 500, 'Failed to delete admin user.', err.message);
+  }
+});
+
+app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const [[{ totalUsers }]] = await db.query(`SELECT COUNT(*) AS totalUsers FROM users`);
+    const [[{ activeUsers }]] = await db.query(`SELECT COUNT(*) AS activeUsers FROM users WHERE status = 'active'`);
+    const [[{ bannedUsers }]] = await db.query(`SELECT COUNT(*) AS bannedUsers FROM users WHERE status = 'banned'`);
+    const [[{ totalLessons }]] = await db.query(`SELECT COUNT(*) AS totalLessons FROM problems`);
+    const [[{ completedSubmissions }]] = await db.query(`SELECT COUNT(*) AS completedSubmissions FROM submissions WHERE is_correct = 1`);
+    const [[{ newRegistrations }]] = await db.query(
+      `SELECT COUNT(*) AS newRegistrations FROM users WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+    );
+    const [recentUsers] = await db.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.email,
+         u.role,
+         u.status,
+         u.created_at,
+         COALESCE(SUM(up.tasks_completed), 0) AS completed_lessons
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       GROUP BY u.id
+       ORDER BY u.created_at DESC
+       LIMIT 5`
+    );
+
+    return sendSuccess(res, 'Admin statistics retrieved.', {
+      totalUsers,
+      activeUsers,
+      bannedUsers,
+      totalLessons,
+      completedSubmissions,
+      newRegistrations,
+      recentUsers
+    });
+  } catch (err) {
+    console.error('❌ ADMIN STATS:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin statistics.', err.message);
+  }
+});
+
+app.get('/api/admin/settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(`SELECT setting_key, setting_value FROM admin_settings`);
+    const settings = rows.reduce((acc, row) => {
+      acc[row.setting_key] = row.setting_value;
+      return acc;
+    }, {});
+    return sendSuccess(res, 'Admin settings loaded.', settings);
+  } catch (err) {
+    console.error('❌ ADMIN GET SETTINGS:', err.message);
+    return sendError(res, 500, 'Failed to load admin settings.', err.message);
+  }
+});
+
+app.put('/api/admin/settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const updates = req.body;
+    const keys = Object.keys(updates);
+    if (keys.length === 0) return sendError(res, 400, 'No settings supplied.');
+
+    const queries = keys.map(key => {
+      return db.query(
+        `INSERT INTO admin_settings (setting_key, setting_value)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+        [key, String(updates[key])]
+      );
+    });
+    await Promise.all(queries);
+
+    return sendSuccess(res, 'Admin settings saved.', updates);
+  } catch (err) {
+    console.error('❌ ADMIN UPDATE SETTINGS:', err.message);
+    return sendError(res, 500, 'Failed to update admin settings.', err.message);
+  }
+});
+
+app.put('/api/auth/profile/:userId', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (req.user.id !== Number(userId) && req.user.role !== 'admin') {
+      return sendError(res, 403, 'You may only update your own profile.');
+    }
+
     const { name, username, email, password, photo } = req.body;
     const fields = [], values = [];
 
@@ -263,10 +653,10 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
     if (photo !== undefined) { fields.push('photo = ?');        values.push(photo); }
     if (password && password !== '••••••••') {
       fields.push('password_hash = ?');
-      values.push(hashPassword(password));
+      values.push(await hashPassword(password));
     }
 
-    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update.' });
+    if (fields.length === 0) return sendError(res, 400, 'No fields to update.');
 
     values.push(userId);
     await db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
@@ -274,10 +664,10 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
     const [rows] = await db.query(
       'SELECT id, name, username, email, photo FROM users WHERE id = ?', [userId]
     );
-    res.json({ success: true, user: rows[0] });
+    return sendSuccess(res, 'Profile updated successfully.', { user: rows[0] });
   } catch (err) {
     console.error('❌ UPDATE PROFILE:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to update profile.', err.message);
   }
 });
 
@@ -301,8 +691,6 @@ app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
   try {
     const { language, concept, difficulty } = req.params;
 
-    // tier comes from query string — ?tier=Beginner / Intermediate / Advanced
-    // Default to Beginner so the first load always works without changes to CodeEditor
     const tier = req.query.tier || 'Beginner';
 
     const [rows] = await db.query(
@@ -311,10 +699,10 @@ app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
        ORDER BY id ASC`,
       [language, concept, difficulty, tier]
     );
-    res.json(rows);
+    return sendSuccess(res, 'Problems loaded.', rows);
   } catch (err) {
     console.error('❌ GET PROBLEMS:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to load problems.', err.message);
   }
 });
 
@@ -584,10 +972,9 @@ app.post('/api/submit', async (req, res) => {
     }
 
     // ── 10. Return full result ────────────────────────────────────
-    res.json({
-      success:          true,
-      level,                  // 'Easy' | 'Intermediate' | 'Hard'  (CART output)
-      nextTier,               // 'Beginner' | 'Intermediate' | 'Advanced'  (NEW — for frontend fetch)
+    return sendSuccess(res, 'Submission recorded.', {
+      level,
+      nextTier,
       correct:          finalCorrect,
       syntaxErrors,
       structuralErrors,
@@ -599,7 +986,7 @@ app.post('/api/submit', async (req, res) => {
             title:           recommended.title,
             concept:         recommended.concept,
             difficulty:      recommended.difficulty,
-            problem_tier:    recommended.problem_tier,   // NEW — included in recommendation
+            problem_tier:    recommended.problem_tier,
             language:        recommended.language,
             similarityScore,
             explanation
@@ -609,7 +996,7 @@ app.post('/api/submit', async (req, res) => {
 
   } catch (err) {
     console.error('❌ SUBMIT:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to submit code.', err.message);
   }
 });
 
@@ -647,10 +1034,10 @@ app.get('/api/recommendations/:userId', async (req, res) => {
       [userId]
     );
 
-    res.json(rows);
+    return sendSuccess(res, 'Recommendations loaded.', rows);
   } catch (err) {
     console.error('❌ GET RECOMMENDATIONS:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to load recommendations.', err.message);
   }
 });
 
@@ -680,10 +1067,10 @@ app.get('/api/progress/:userId', async (req, res) => {
         structuralErrors: row.structural_errors
       };
     });
-    res.json(progress);
+    return sendSuccess(res, 'Progress loaded.', progress);
   } catch (err) {
     console.error('❌ GET PROGRESS:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to load progress.', err.message);
   }
 });
 
@@ -701,10 +1088,10 @@ app.get('/api/daily-progress/:userId', async (req, res) => {
       [userId]
     );
 
-    res.json(rows);
+    return sendSuccess(res, 'Daily progress loaded.', rows);
   } catch (err) {
     console.error('❌ GET DAILY PROGRESS:', err.message);
-    res.status(500).json({ error: err.message });
+    return sendError(res, 500, 'Failed to load daily progress.', err.message);
   }
 });
 
@@ -719,30 +1106,28 @@ app.post('/api/retrain', async (req, res) => {
   const scriptPath = path.join(__dirname, 'utils', 'trainCart.js');
 
   if (!fs.existsSync(scriptPath)) {
-    return res.status(500).json({ error: `Training script not found at ${scriptPath}` });
+    return sendError(res, 500, `Training script not found at ${scriptPath}`);
   }
 
   exec(`node "${scriptPath}"`, { timeout: 60000 }, (err, stdout, stderr) => {
     if (err) {
       console.error('❌ Retrain failed:', stderr || err.message);
-      return res.status(500).json({ error: 'Training failed', details: stderr || err.message });
+      return sendError(res, 500, 'Training failed.', stderr || err.message);
     }
 
-    // Reload the newly written model
     try {
       const exported = JSON.parse(fs.readFileSync(CART_MODEL_PATH, 'utf8'));
       cartModel.importTree(exported);
       cartReady = true;
       console.log('✅ CART model reloaded after retraining.');
-      res.json({
-        success:    true,
+      return sendSuccess(res, 'CART model retrained.', {
         trained_at: exported.meta.trained_at,
         features:   exported.meta.features,
         max_depth:  exported.meta.max_depth,
         output:     stdout,
       });
     } catch (loadErr) {
-      res.status(500).json({ error: 'Model trained but failed to reload', details: loadErr.message });
+      return sendError(res, 500, 'Model trained but failed to reload.', loadErr.message);
     }
   });
 });
@@ -754,12 +1139,9 @@ app.post('/api/retrain', async (req, res) => {
 ══════════════════════════════════════ */
 app.get('/api/cart-model', (req, res) => {
   if (!cartReady) {
-    return res.status(503).json({
-      ready: false,
-      message: 'CART model not loaded. Run: node utils/trainCart.js',
-    });
+    return sendError(res, 503, 'CART model not loaded. Run: node utils/trainCart.js');
   }
-  res.json({ ready: true, ...cartModel.exportTree() });
+  return sendSuccess(res, 'CART model loaded.', { ...cartModel.exportTree() });
 });
 
 /* ══════════════════════════════════════
@@ -768,9 +1150,9 @@ app.get('/api/cart-model', (req, res) => {
 app.get('/api/test', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT COUNT(*) AS total FROM problems');
-    res.json({ status: 'connected', problems: rows[0].total });
+    return sendSuccess(res, 'Database connected.', { problems: rows[0].total });
   } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+    return sendError(res, 500, 'Database connectivity check failed.', err.message);
   }
 });
 
@@ -778,5 +1160,183 @@ app.get('/api/test', async (req, res) => {
 /* ══════════════════════════════════════
    START SERVER
 ══════════════════════════════════════ */
+async function testDatabaseConnection() {
+  try {
+    const [rows] = await db.query('SELECT 1 AS connected');
+    console.log('✅ MySQL connection test passed:', rows[0].connected);
+  } catch (err) {
+    console.error('❌ MySQL connection failed:', err.message);
+    process.exit(1);
+  }
+}
+
+async function ensureDatabaseSchema() {
+  const tableQueries = [
+    `CREATE TABLE IF NOT EXISTS admin_settings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      setting_key VARCHAR(255) NOT NULL UNIQUE,
+      setting_value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    `CREATE TABLE IF NOT EXISTS daily_progress (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL,
+      language VARCHAR(100) NOT NULL,
+      progress_date DATE NOT NULL,
+      score INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY ux_user_date (user_id, progress_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+
+
+    `CREATE TABLE IF NOT EXISTS recommendations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL,
+      source_problem_id BIGINT UNSIGNED NOT NULL,
+      recommended_problem_id BIGINT UNSIGNED NOT NULL,
+      similarity_score DECIMAL(6,4) DEFAULT 0,
+      explanation TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+
+
+    `CREATE TABLE IF NOT EXISTS activities (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED,
+      activity_type VARCHAR(255),
+      details TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+
+
+    `CREATE TABLE IF NOT EXISTS logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      level VARCHAR(50),
+      message TEXT,
+      meta JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+    `CREATE TABLE IF NOT EXISTS achievements (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`,
+
+
+
+    `CREATE TABLE IF NOT EXISTS admins (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL UNIQUE,
+      role VARCHAR(50) DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+  ];
+
+  for (const query of tableQueries) {
+    try {
+      await db.query(query);
+    } catch (err) {
+      console.warn('⚠ Failed to ensure schema:', err.message);
+    }
+  }
+
+  await migrateExistingSchema();
+  console.log('✅ Database schema initialization complete.');
+}
+
+async function columnExists(table, column) {
+  const [rows] = await db.query(
+    'SELECT COUNT(*) AS cnt FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?',
+    [process.env.DB_NAME, table, column]
+  );
+  return rows[0].cnt > 0;
+}
+
+async function migrateExistingSchema() {
+  try {
+    const usersHasPasswordHash = await columnExists('users', 'password_hash');
+    const usersHasPassword = await columnExists('users', 'password');
+
+    if (!usersHasPasswordHash && usersHasPassword) {
+      await db.query(
+        'ALTER TABLE users CHANGE COLUMN `password` `password_hash` VARCHAR(255) NOT NULL'
+      );
+    } else if (!usersHasPasswordHash) {
+      await db.query(
+        "ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"
+      );
+    }
+
+    if (!(await columnExists('users', 'name'))) {
+      await db.query("ALTER TABLE users ADD COLUMN name VARCHAR(120) NOT NULL DEFAULT ''");
+    }
+    if (!(await columnExists('users', 'photo'))) {
+      await db.query("ALTER TABLE users ADD COLUMN photo TEXT NULL");
+    }
+    if (!(await columnExists('users', 'role'))) {
+      await db.query("ALTER TABLE users ADD COLUMN role ENUM('student','admin') NOT NULL DEFAULT 'student'");
+    }
+    if (!(await columnExists('users', 'status'))) {
+      await db.query("ALTER TABLE users ADD COLUMN status ENUM('active','banned','pending','suspended') NOT NULL DEFAULT 'active'");
+    }
+    if (!(await columnExists('users', 'last_login'))) {
+      await db.query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL");
+    }
+
+    const userProfileAdds = [];
+    if (!(await columnExists('user_profiles', 'tasks_completed'))) {
+      userProfileAdds.push('ADD COLUMN tasks_completed INT NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('user_profiles', 'total_tasks'))) {
+      userProfileAdds.push('ADD COLUMN total_tasks INT NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('user_profiles', 'avg_attempts'))) {
+      userProfileAdds.push('ADD COLUMN avg_attempts DECIMAL(8,2) NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('user_profiles', 'syntax_errors'))) {
+      userProfileAdds.push('ADD COLUMN syntax_errors INT NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('user_profiles', 'structural_errors'))) {
+      userProfileAdds.push('ADD COLUMN structural_errors INT NOT NULL DEFAULT 0');
+    }
+    if (userProfileAdds.length > 0) {
+      await db.query(`ALTER TABLE user_profiles ${userProfileAdds.join(', ')}`);
+    }
+
+    const submissionAdds = [];
+    if (!(await columnExists('submissions', 'syntax_errors'))) {
+      submissionAdds.push('ADD COLUMN syntax_errors INT NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('submissions', 'structural_errors'))) {
+      submissionAdds.push('ADD COLUMN structural_errors INT NOT NULL DEFAULT 0');
+    }
+    if (!(await columnExists('submissions', 'hint_used'))) {
+      submissionAdds.push('ADD COLUMN hint_used TINYINT(1) NOT NULL DEFAULT 0');
+    }
+    if (submissionAdds.length > 0) {
+      await db.query(`ALTER TABLE submissions ${submissionAdds.join(', ')}`);
+    }
+
+    console.log('✅ Existing schema migrated for compatibility.');
+  } catch (err) {
+    console.warn('⚠ Schema migration failed:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Backend running at http://localhost:${PORT}`));
+testDatabaseConnection()
+  .then(() => ensureDatabaseSchema())
+  .then(() => {
+    app.listen(PORT, () => console.log(`🚀 Backend running at http://localhost:${PORT}`));
+  })
+  .catch((err) => {
+    console.error('❌ Startup failure:', err.message);
+    process.exit(1);
+  });

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import styles from './SignUp.module.css';
 import ThemeToggle from '../shared/ThemeToggle';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ─── Replace this with your real Google Client ID ───────────────────────────
 // Get it from: https://console.cloud.google.com → APIs & Services → Credentials
 const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
@@ -42,7 +44,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
     setLoading(true);
 
     try {
-      const res  = await fetch('http://localhost:5000/api/auth/register', {
+      const res  = await fetch(`${API_BASE}/api/auth/register`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
@@ -60,7 +62,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
         return;
       }
 
-      onSignUp(data.user); // { id, name, username, email, photo }
+      onSignUp({ ...data.user, token: data.token }); // { id, name, username, email, photo, token }
     } catch {
       setError('Cannot reach the server. Make sure the backend is running.');
     } finally {
@@ -96,7 +98,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
           const userInfo = await infoRes.json();
 
           // 2. Send to backend → will register if new, login if existing
-          const res  = await fetch('http://localhost:5000/api/auth/google', {
+          const res  = await fetch(`${API_BASE}/api/auth/google`, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
@@ -112,7 +114,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
             return;
           }
 
-          onSignUp(data.user);
+          onSignUp({ ...data.user, token: data.token });
         } catch {
           setError('Something went wrong during Google sign-up.');
         } finally {
