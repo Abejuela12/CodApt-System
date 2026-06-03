@@ -7,7 +7,7 @@ import AdminCourses from '../Admin-Courses/AdminCourses';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
+const AdminDashboard = ({ isDarkMode, toggleTheme, authToken, onLogout }) => {
   const [currentView, setCurrentView] = useState('dashboard');
   const [stats, setStats]             = useState({
     totalUsers: 0,
@@ -15,8 +15,11 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
     bannedUsers: 0,
     totalLessons: 0,
     completedSubmissions: 0,
+    newRegistrations: 0,
     recentUsers: []
   });
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [avgScore, setAvgScore] = useState(0);
 
   const handleNavClick = (view) => {
     setCurrentView(view);
@@ -32,7 +35,12 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
         });
         const data = await res.json();
         if (res.ok) {
-          setStats(data);
+          setStats(data.data || data);
+          // Calculate actual average score from user profiles
+          if (data.data?.recentUsers?.length > 0) {
+            const totalScore = data.data.recentUsers.reduce((sum, user) => sum + (user.avg_success || 0), 0);
+            setAvgScore(Math.round((totalScore / data.data.recentUsers.length) * 100));
+          }
         }
       } catch (err) {
         console.error('Failed to load admin stats', err);
@@ -42,6 +50,12 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
   }, [authToken]);
 
   const recentUsers = stats.recentUsers || [];
+
+  const handleLogoutClick = () => {
+    setShowProfileMenu(false);
+    if (onLogout) onLogout();
+    else window.location.href = '/';
+  };
 
   return (
     <div className={styles.container}>
@@ -92,7 +106,14 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
             <span className={styles.iconBtn} onClick={toggleTheme}>
               {isDarkMode ? '☀️' : '🌙'}
             </span>
-            <div className={styles.profileCircle}>👤</div>
+            <div className={styles.profileMenuWrapper}>
+              <button className={styles.profileCircle} onClick={() => setShowProfileMenu(!showProfileMenu)}>👤</button>
+              {showProfileMenu && (
+                <div className={styles.profileDropdown}>
+                  <button className={styles.logoutBtn} onClick={handleLogoutClick}>🚪 Logout</button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -112,14 +133,14 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>📈</span>
                         <p>Avg Score</p>
-                        <h3>{stats.totalUsers > 0 ? `${Math.round((stats.completedSubmissions || 0) / stats.totalUsers)}%` : '0%'}</h3>
+                        <h3>{avgScore}%</h3>
                     </div>
                 </div>
                 <div className={styles.statCard}>
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>✅</span>
-                        <p>Average Progress</p>
-                        <h3>{stats.totalLessons > 0 ? `${Math.round(((stats.completedSubmissions || 0) / stats.totalLessons) * 100)}%` : '0%'}</h3>
+                        <p>Active Users</p>
+                        <h3>{stats.activeUsers ?? 0}</h3>
                     </div>
                 </div>
               </div>
@@ -134,7 +155,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
 
                   {recentUsers.length > 0 ? (
                     recentUsers.map((user) => {
-                      const progress = user.completed_lessons ? Math.min(user.completed_lessons * 10, 100) : 0;
+                      const progress = user.completed_lessons ? Math.min(user.completed_lessons * 10, 100) : Math.round((user.avg_success || 0) * 100);
                       return (
                         <div key={user.id} className={styles.userRow}>
                           <div className={styles.userInfo}>
@@ -169,8 +190,8 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
           )}
 
           {currentView === 'users' && <UsersPanel authToken={authToken} />}
-          {currentView === 'reports' && <AdminReports />}
-          {currentView === 'content' && <AdminCourses />}
+          {currentView === 'reports' && <AdminReports authToken={authToken} />}
+          {currentView === 'content' && <AdminCourses authToken={authToken} />}
           {currentView === 'settings' && <AdminSettings authToken={authToken} />}
         </div>
       </main>
@@ -179,3 +200,4 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, authToken }) => {
 };
 
 export default AdminDashboard;
+

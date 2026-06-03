@@ -561,6 +561,7 @@ app.delete('/api/admin/users/:userId', verifyToken, requireAdmin, async (req, re
 
 app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
   try {
+
     const [[{ totalUsers }]] = await db.query(`SELECT COUNT(*) AS totalUsers FROM users`);
     const [[{ activeUsers }]] = await db.query(`SELECT COUNT(*) AS activeUsers FROM users WHERE status = 'active'`);
     const [[{ bannedUsers }]] = await db.query(`SELECT COUNT(*) AS bannedUsers FROM users WHERE status = 'banned'`);
@@ -597,6 +598,103 @@ app.get('/api/admin/stats', verifyToken, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('❌ ADMIN STATS:', err.message);
     return sendError(res, 500, 'Failed to fetch admin statistics.', err.message);
+  }
+});
+
+app.get('/api/admin/reports/performance', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    // Build the last 6 months series using daily_progress scores.
+    // If language filtering isn't available in daily_progress, aggregate across all.
+    const [rows] = await db.query(
+      `SELECT DATE_FORMAT(progress_date, '%b %y') AS month,
+              ROUND(AVG(score)) AS score,
+              COUNT(*) AS samples
+       FROM daily_progress
+       WHERE progress_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+       GROUP BY DATE_FORMAT(progress_date, '%b %y')
+       ORDER BY MIN(progress_date) ASC`
+    );
+
+    const performance = (rows || []).map(r => ({
+      name: r.month,
+      success: Number.isFinite(r.score) ? r.score : 0,
+      score: Number.isFinite(r.score) ? r.score : 0
+    }));
+
+    return sendSuccess(res, 'Admin performance reports loaded.', { performance });
+  } catch (err) {
+    console.error('❌ ADMIN REPORT PERFORMANCE:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin performance report.', err.message);
+  }
+});
+
+app.get('/api/admin/reports/topics', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT concept, COUNT(*) AS count
+       FROM problems
+       GROUP BY concept
+       ORDER BY count DESC
+       LIMIT 6`
+    );
+
+    const palette = ['#76D7A4', '#F1C40F', '#76D7A4', '#F1C40F', '#76D7A4', '#F1C40F'];
+    const topics = (rows || []).map((r, i) => ({
+      name: r.concept,
+      count: r.count,
+      color: palette[i % palette.length]
+    }));
+
+    return sendSuccess(res, 'Admin topics report loaded.', { topics });
+  } catch (err) {
+    console.error('❌ ADMIN REPORT TOPICS:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin topics report.', err.message);
+  }
+});
+
+app.get('/api/admin/reports/errors', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+         CASE
+           WHEN COALESCE(syntax_errors, 0) > COALESCE(structural_errors, 0) THEN 'Syntax Errors'
+           WHEN COALESCE(structural_errors, 0) > 0 THEN 'Logic Errors'
+           ELSE 'Other'
+         END AS bucket,
+         COUNT(*) AS total
+       FROM submissions s
+       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+       GROUP BY bucket`
+    );
+
+    // Normalize into percentage distribution over the available buckets.
+    const raw = (rows || []).map(r => ({ name: r.bucket, total: Number(r.total) || 0 }));
+    const sum = raw.reduce((a, b) => a + b.total, 0) || 1;
+
+    const colorMap = {
+      'Syntax Errors': '#EE6666',
+      'Logic Errors': '#FAC858',
+      'Runtime Errors': '#5470C6',
+      'Other': '#91CC75'
+    };
+
+    // Ensure expected buckets exist for stable chart labels.
+    const expected = ['Syntax Errors', 'Logic Errors', 'Runtime Errors', 'Other'];
+    const bucketByName = new Map(raw.map(r => [r.name, r.total]));
+
+    const pieData = expected.map(name => {
+      const total = bucketByName.get(name) || 0;
+      return {
+        name,
+        value: Math.round((total / sum) * 100),
+        color: colorMap[name] || '#91CC75'
+      };
+    });
+
+    return sendSuccess(res, 'Admin errors report loaded.', { errorDistribution: pieData });
+  } catch (err) {
+    console.error('❌ ADMIN REPORT ERRORS:', err.message);
+    return sendError(res, 500, 'Failed to fetch admin errors report.', err.message);
   }
 });
 

@@ -267,6 +267,7 @@ function App() {
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
         authToken={authToken}
+        onLogout={handleLogout}
       />
     );
   }
