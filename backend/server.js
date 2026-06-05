@@ -20,7 +20,33 @@ app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
       [language, concept, difficulty]
     );
 
-    res.json(rows);
+    const formatted = rows.map(r => {
+      let hints = r.hints;
+
+      if (Buffer.isBuffer(hints)) {
+        hints = hints.toString('utf8');
+      }
+
+      if (typeof hints === 'string') {
+        try {
+          hints = JSON.parse(hints);
+        } catch (e) {
+          console.log('❌ JSON parse error:', e.message);
+          hints = null;
+        }
+      }
+
+      return {
+        ...r,
+        hints: hints || {
+          level1: 'No hint available',
+          level2: 'No hint available',
+          level3: 'No hint available'
+        }
+      };
+    });
+
+    res.json(formatted);
   } catch (err) {
     console.error('❌ GET PROBLEMS ERROR:', err);
     res.status(500).json({ error: err.message });
@@ -147,54 +173,9 @@ app.get('/api/profile/:userId/:language/:concept', async (req, res) => {
 
 
 /* ============================
-   HINT
-============================ */
-app.get("/api/problems/:language/:concept/:level", async (req, res) => {
-  try {
-    const { language, concept, level } = req.params;
-
-    const [rows] = await db.query(
-      "SELECT * FROM problems WHERE language=? AND concept=? AND level=?",
-      [language, concept, level]
-    );
-
-    const formatted = rows.map(r => {
-      let hints = r.hints;
-
-      if (Buffer.isBuffer(hints)) {
-        hints = hints.toString("utf8");
-      }
-
-      if (typeof hints === "string") {
-        try {
-          hints = JSON.parse(hints);
-        } catch (e) {
-          console.log("❌ JSON parse error:", e.message);
-          hints = null;
-        }
-      }
-
-      return {
-        ...r,
-        hints: hints || {
-          level1: "No hint available",
-          level2: "No hint available",
-          level3: "No hint available"
-        }
-      };
-    });
-
-    res.json(formatted);
-  } catch (err) {
-    console.error("❌ GET PROBLEMS ERROR:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-/* ============================
    START SERVER
 ============================ */
-app.listen(5000, () => {
-  console.log('🚀 Backend running at http://localhost:5000');
+const port = process.env.PORT || 5000;
+app.listen(port, () => {
+  console.log(`🚀 Backend running at http://localhost:${port}`);
 });

@@ -3,9 +3,8 @@ import Editor from '@monaco-editor/react';
 import Split from 'react-split';
 import './Split.css';
 import { PYTHON_EASY_TASKS } from '../../data/pythonEasyTasks';
-import { analyzePythonVariable } from "../../utils/pythonAnalyzer";
+import { analyzeCode, evaluateCode } from "../../utils/codeAnalyzer";
 import { recommendNextTask } from "../../utils/recommendNextTask";
-// import { executePythonCode } from "../../utils/pythonExecutor";
 import { calculateLanguageProgress, getLanguageLevel } from "../../utils/levelUtils";
 import { getHintLevel } from "../../utils/hintUtils";
 
@@ -41,68 +40,19 @@ import { getHintLevel } from "../../utils/hintUtils";
       recommendation: ''
     });
 
-const executePythonCode = (code) => {
-  console.log('🔍 Executing:\n', code);
-  
-  const lines = code.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-  let output = '';
-  const context = {};
-
-  lines.forEach(line => {
-    console.log('📝 Processing:', line);
-    
-    // 1. ASSIGNMENT (name = "John")
-    if (line.includes('=') && !line.includes('print')) {
-      const parts = line.split('=');
-      if (parts.length === 2) {
-        const varName = parts[0].trim();
-        let value = parts[1].trim();
-        
-        // Remove quotes for strings
-        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-          context[varName] = value.slice(1, -1);
-        } else if (!isNaN(value)) {
-          context[varName] = Number(value);
-        } else {
-          context[varName] = value;
-        }
-        
-        console.log(`✅ ${varName} = "${context[varName]}"`);
-      }
-    }
-    
-    // 2. PRINT - SIMPLE STRING MATCH
-  else if (line.includes('print(') && line.includes(')')) {
-    console.log('🔍 PRINT FOUND:', line);
-
-    const printContent = line.match(/print\s*\(\s*(.+?)\s*\)/);
-
-    if (printContent) {
-      let expr = printContent[1].trim();
-
-      // Replace variables
-      Object.keys(context).forEach(varName => {
-        const regex = new RegExp(`\\b${varName}\\b`, 'g');
-        expr = expr.replace(regex, JSON.stringify(context[varName]));
-      });
-
-      try {
-        const result = eval(expr);
-        output += result + '\n';
-        console.log('✅ PRINT:', result);
-      } catch (e) {
-        output += 'ERROR\n';
-        console.log('❌ Error:', e.message);
-      }
-    }
-  }
-    });
-    
-    console.log('🎯 FINAL:', output);
-    return output || 'No output produced';
-  };
-  // end
 const hintRef = useRef(null);
+
+const getStarterCode = (lang) => {
+  const normalized = lang?.toString().toLowerCase();
+  if (normalized === 'javascript') return `console.log("Replace this line!");`;
+  if (normalized === 'java') return `System.out.println("Replace this line!");`;
+  return `print("Replace this line!")`;
+};
+
+const getCommentSymbol = (lang) => {
+  const normalized = lang?.toString().toLowerCase();
+  return normalized === 'python' ? '#' : '//';
+};
   // handle Hint
 const handleHint = () => {
   const level = getHintLevel(
@@ -122,7 +72,7 @@ const handleHint = () => {
 
   // Update handleRun:
   const handleRun = () => {
-    const result = executePythonCode(code);
+    const result = evaluateCode(code, language);
     setOutput(result);
   };
 
@@ -171,7 +121,7 @@ const handleHint = () => {
 
       try {
         // 1. Analyze code
-        const result = analyzePythonVariable(code, task);
+        const result = analyzeCode(code, task, language);
 
         // 2. Calculate score
         const score = calculateScore(newAttempts, timeSpentSeconds, result.correct);
@@ -276,21 +226,21 @@ const handleHint = () => {
   useEffect(() => {
     if (!task) return;
 
-      console.log("📥 TASK LOADED:", task);
-  console.log("💡 TASK HINTS:", task?.hints);
+    console.log("📥 TASK LOADED:", task);
+    console.log("💡 TASK HINTS:", task?.hints);
 
-      setCode(
-  "# Task " + task.id + ": " + (task.title || "") + "\n\n" +
-  "# Write your code here:\n" +
-  "print(\"Replace this line!\")"
-);
+    const comment = getCommentSymbol(language);
+    setCode(
+      `${comment} Task ${task.id}: ${task.title || ""}\n\n` +
+      `${comment} Write your code here:\n` +
+      `${getStarterCode(language)}`
+    );
 
-
-      setOutput('');
-      setAttempts(0);
-      setTimeSpent(0);
-      setRecommendation('');
-  }, [currentTaskIndex, tasks]);
+    setOutput('');
+    setAttempts(0);
+    setTimeSpent(0);
+    setRecommendation('');
+  }, [currentTaskIndex, tasks, language]);
 
 
   const buttonStyle = {
@@ -314,7 +264,8 @@ const handleHint = () => {
   };
 
   const getLanguage = (lang) => {
-    switch(lang) {
+    const normalized = lang?.toString().toLowerCase();
+    switch(normalized) {
       case 'python': return 'python';
       case 'java': return 'java';
       case 'javascript': return 'javascript';
