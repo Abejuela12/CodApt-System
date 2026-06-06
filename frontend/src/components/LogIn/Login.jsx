@@ -13,6 +13,8 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
     password: ''
   });
   const [adminError, setAdminError] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -51,17 +53,43 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login with:', formData);
-    // Pass form data to onLogin
-    onLogin({
-      name: formData.email.split('@')[0],
-      username: formData.email.split('@')[0],
-      email: formData.email,
-      password: formData.password,
-      photo: null
-    });
+    setLoginError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email, password: formData.password })
+      });
+
+      const contentType = response.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+      const data = isJson ? await response.json() : null;
+
+      if (!response.ok) {
+        const message = data?.message || data?.error || (isJson ? JSON.stringify(data) : 'Login failed');
+        setLoginError(message);
+        setLoading(false);
+        return;
+      }
+
+      if (!data || !data.success || !data.user) {
+        setLoginError(data?.message || 'Invalid credentials');
+        setLoading(false);
+        return;
+      }
+
+      onLogin({
+        ...data.user
+      });
+    } catch (err) {
+      setLoading(false);
+      setLoginError('Server error. Check backend connection.');
+      console.error('Login error:', err);
+    }
   };
 
   const handleAdminSubmit = (e) => {
@@ -151,9 +179,9 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   required
                 />
-                
-                <button type="submit" className={styles.submitBtn}>
-                  Login
+                {loginError && <p style={{ color: '#ff6b6b', fontSize: '12px', marginBottom: '10px' }}>{loginError}</p>}
+                <button type="submit" className={styles.submitBtn} disabled={loading}>
+                  {loading ? 'Logging in...' : 'Login'}
                 </button>
               </form>
 

@@ -45,17 +45,41 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const [signUpError, setSignUpError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Sign up with:', formData);
-    // Pass form data to onSignUp
-    onSignUp({
-      name: formData.email.split('@')[0],
-      username: formData.email.split('@')[0],
+    setSignUpError('');
+    setLoading(true);
+
+    const payload = {
       email: formData.email,
       password: formData.password,
-      photo: null
-    });
+      username: formData.email.split('@')[0],
+      name: formData.email.split('@')[0]
+    };
+
+    try {
+      const result = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await result.json();
+      setLoading(false);
+
+      if (!result.ok || !data.success) {
+        setSignUpError(data.message || 'Registration failed');
+        return;
+      }
+
+      onSignUp(data.user);
+    } catch (error) {
+      setLoading(false);
+      setSignUpError('Unable to sign up. Try again later.');
+      console.error('Sign up error:', error);
+    }
   };
 
   return (
@@ -109,9 +133,9 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               required
             />
-            
-            <button type="submit" className={styles.submitBtn}>
-              Sign Up
+            {signUpError && <p style={{ color: '#ff6b6b', fontSize: '12px', marginBottom: '10px' }}>{signUpError}</p>}
+            <button type="submit" className={styles.submitBtn} disabled={loading}>
+              {loading ? 'Signing up...' : 'Sign Up'}
             </button>
           </form>
 
