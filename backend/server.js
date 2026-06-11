@@ -61,32 +61,14 @@ function cartLevelToTier(cartLevel) {
   return map[cartLevel] || 'Beginner';
 }
 
-
-function shouldDemote(
-  profile,
-  isCorrect,
-  attempts,
-  hintUsed,
-  hasHardEvidence
-) {
+function shouldDemote(profile, isCorrect, attempts, hintUsed, hasHardEvidence) {
   if (hasHardEvidence) return false;
-
-  const struggled =
-    !isCorrect ||
-    hintUsed ||
-    attempts >= 3;
-
-  const weakProfile =
-    profile.success_rate < 0.50;
-
+  const struggled    = !isCorrect || hintUsed || attempts >= 3;
+  const weakProfile  = profile.success_rate < 0.50;
   return struggled && weakProfile;
 }
 
-function shouldDemoteToEasy(
-  profile,
-  attempts,
-  structuralErrors
-) {
+function shouldDemoteToEasy(profile, attempts, structuralErrors) {
   return (
     attempts >= 4 &&
     profile.success_rate < 0.40 &&
@@ -175,7 +157,11 @@ app.post('/api/auth/register', async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ error: 'Email and password are required.' });
 
-    const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+    // SUPABASE (pg): use { rows } and $1 placeholders
+    const { rows: existing } = await db.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
     if (existing.length > 0)
       return res.status(409).json({ error: 'An account with this email already exists.' });
 
@@ -183,14 +169,22 @@ app.post('/api/auth/register', async (req, res) => {
     const displayName     = name     || email.split('@')[0];
     const displayUsername = username || email.split('@')[0];
 
-    const [result] = await db.query(
-      `INSERT INTO users (name, username, email, password_hash, photo) VALUES (?, ?, ?, ?, ?)`,
+    // SUPABASE (pg): use RETURNING id to get the inserted row's id
+    const { rows: result } = await db.query(
+      `INSERT INTO users (name, username, email, password_hash, photo)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
       [displayName, displayUsername, email, hashed, photo || null]
     );
 
     res.status(201).json({
       success: true,
-      user: { id: result.insertId, name: displayName, username: displayUsername, email, photo: photo || null }
+      user: {
+        id:       result[0].id,
+        name:     displayName,
+        username: displayUsername,
+        email,
+        photo:    photo || null
+      }
     });
   } catch (err) {
     console.error('❌ REGISTER:', err.message);
@@ -205,8 +199,11 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
 
     const hashed = hashPassword(password);
-    const [rows] = await db.query(
-      `SELECT id, name, username, email, photo FROM users WHERE email = ? AND password_hash = ?`,
+
+    // SUPABASE (pg): { rows } and $1, $2
+    const { rows } = await db.query(
+      `SELECT id, name, username, email, photo
+       FROM users WHERE email = $1 AND password_hash = $2`,
       [email, hashed]
     );
 
@@ -214,7 +211,16 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password.' });
 
     const user = rows[0];
-    res.json({ success: true, user: { id: user.id, name: user.name, username: user.username, email: user.email, photo: user.photo || null } });
+    res.json({
+      success: true,
+      user: {
+        id:       user.id,
+        name:     user.name,
+        username: user.username,
+        email:    user.email,
+        photo:    user.photo || null
+      }
+    });
   } catch (err) {
     console.error('❌ LOGIN:', err.message);
     res.status(500).json({ error: err.message });
@@ -226,25 +232,49 @@ app.post('/api/auth/google', async (req, res) => {
     const { name, email, photo } = req.body;
     if (!email) return res.status(400).json({ error: 'Google did not return an email.' });
 
-    const [existing] = await db.query(
-      `SELECT id, name, username, email, photo FROM users WHERE email = ?`, [email]
+    // SUPABASE (pg): { rows } and $1
+    const { rows: existing } = await db.query(
+      `SELECT id, name, username, email, photo FROM users WHERE email = $1`,
+      [email]
     );
 
     if (existing.length > 0) {
       const user = existing[0];
       if (photo && photo !== user.photo) {
-        await db.query('UPDATE users SET photo = ? WHERE id = ?', [photo, user.id]);
+        await db.query('UPDATE users SET photo = $1 WHERE id = $2', [photo, user.id]);
         user.photo = photo;
       }
-      return res.json({ success: true, user: { id: user.id, name: user.name, username: user.username, email: user.email, photo: user.photo || null } });
+      return res.json({
+        success: true,
+        user: {
+          id:       user.id,
+          name:     user.name,
+          username: user.username,
+          email:    user.email,
+          photo:    user.photo || null
+        }
+      });
     }
 
     const username = email.split('@')[0];
-    const [result] = await db.query(
-      `INSERT INTO users (name, username, email, password_hash, photo) VALUES (?, ?, ?, 'google-oauth', ?)`,
+
+    // SUPABASE (pg): RETURNING to get new id
+    const { rows: result } = await db.query(
+      `INSERT INTO users (name, username, email, password_hash, photo)
+       VALUES ($1, $2, $3, 'google-oauth', $4) RETURNING id`,
       [name || username, username, email, photo || null]
     );
-    res.status(201).json({ success: true, user: { id: result.insertId, name: name || username, username, email, photo: photo || null } });
+
+    res.status(201).json({
+      success: true,
+      user: {
+        id:       result[0].id,
+        name:     name || username,
+        username,
+        email,
+        photo:    photo || null
+      }
+    });
   } catch (err) {
     console.error('❌ GOOGLE AUTH:', err.message);
     res.status(500).json({ error: err.message });
@@ -255,24 +285,31 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const { name, username, email, password, photo } = req.body;
-    const fields = [], values = [];
+    const fields = [];
+    const values = [];
+    let   idx    = 1; // SUPABASE (pg): numbered placeholders start at $1
 
-    if (name)                { fields.push('name = ?');         values.push(name); }
-    if (username)            { fields.push('username = ?');     values.push(username); }
-    if (email)               { fields.push('email = ?');        values.push(email); }
-    if (photo !== undefined) { fields.push('photo = ?');        values.push(photo); }
+    if (name)                { fields.push(`name = $${idx++}`);          values.push(name); }
+    if (username)            { fields.push(`username = $${idx++}`);      values.push(username); }
+    if (email)               { fields.push(`email = $${idx++}`);         values.push(email); }
+    if (photo !== undefined) { fields.push(`photo = $${idx++}`);         values.push(photo); }
     if (password && password !== '••••••••') {
-      fields.push('password_hash = ?');
+      fields.push(`password_hash = $${idx++}`);
       values.push(hashPassword(password));
     }
 
     if (fields.length === 0) return res.status(400).json({ error: 'No fields to update.' });
 
-    values.push(userId);
-    await db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    values.push(userId); // last param = userId
+    await db.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx}`,
+      values
+    );
 
-    const [rows] = await db.query(
-      'SELECT id, name, username, email, photo FROM users WHERE id = ?', [userId]
+    // SUPABASE (pg): { rows } and $1
+    const { rows } = await db.query(
+      'SELECT id, name, username, email, photo FROM users WHERE id = $1',
+      [userId]
     );
     res.json({ success: true, user: rows[0] });
   } catch (err) {
@@ -283,31 +320,16 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
 
 /* ══════════════════════════════════════
    API — GET PROBLEMS
-   
-   CHANGE 1: Now fetches by problem_tier instead of difficulty.
-   
-   The frontend (CodeEditor) sends:
-     language  = Python / Java / JavaScript
-     concept   = Variables / Loops / etc.
-     difficulty = Easy / Intermediate / Hard  (concept group — unchanged)
-   
-   The server now uses difficulty to filter concept group AND
-   problem_tier to filter internal difficulty (Beginner by default).
-   
-   The adaptive tier is passed as a query param: ?tier=Beginner
-   If no tier is sent, defaults to Beginner so first load always works.
 ══════════════════════════════════════ */
 app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
   try {
     const { language, concept, difficulty } = req.params;
-
-    // tier comes from query string — ?tier=Beginner / Intermediate / Advanced
-    // Default to Beginner so the first load always works without changes to CodeEditor
     const tier = req.query.tier || 'Beginner';
 
-    const [rows] = await db.query(
+    // SUPABASE (pg): { rows } and $1–$4
+    const { rows } = await db.query(
       `SELECT * FROM problems
-       WHERE language = ? AND concept = ? AND difficulty = ? AND problem_tier = ?
+       WHERE language = $1 AND concept = $2 AND difficulty = $3 AND problem_tier = $4
        ORDER BY id ASC`,
       [language, concept, difficulty, tier]
     );
@@ -318,13 +340,9 @@ app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
   }
 });
 
-/* ══════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════
    API — SUBMIT CODE
-   
-   CHANGE 2: After CART classifies the user's level, the server
-   now also returns the recommended next problem_tier so the
-   frontend knows which tier to fetch next.
-══════════════════════════════════════════════════════════════════ */
+══════════════════════════════════════ */
 app.post('/api/submit', async (req, res) => {
   try {
     const {
@@ -333,8 +351,9 @@ app.post('/api/submit', async (req, res) => {
     } = req.body;
 
     // ── 1. Fetch problem meta ────────────────────────────────────
-    const [problemRows] = await db.query(
-      'SELECT * FROM problems WHERE id = ?',
+    // SUPABASE (pg): { rows } and $1
+    const { rows: problemRows } = await db.query(
+      'SELECT * FROM problems WHERE id = $1',
       [problemId]
     );
     const problem           = problemRows[0] || {};
@@ -353,12 +372,13 @@ app.post('/api/submit', async (req, res) => {
     const successValue = finalCorrect ? 1 : 0;
 
     // ── 4. Save submission ───────────────────────────────────────
+    // SUPABASE (pg): $1–$11
     await db.query(
       `INSERT INTO submissions
-      (user_id, problem_id, language, concept, submitted_code,
+       (user_id, problem_id, language, concept, submitted_code,
         attempts, time_spent, is_correct,
         syntax_errors, structural_errors, hint_used)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         userId,
         problemId,
@@ -370,57 +390,66 @@ app.post('/api/submit', async (req, res) => {
         finalCorrect,
         syntaxErrors,
         structuralErrors,
-        hintUsed ? 1 : 0
+        hintUsed ? true : false  // pg uses true/false booleans (not 1/0)
       ]
     );
 
     // ── 5. Upsert user_profiles ──────────────────────────────────
-    const [existing] = await db.query(
-      `SELECT * FROM user_profiles WHERE user_id = ? AND language = ? AND concept = ?`,
+    // SUPABASE (pg): { rows } and $1–$3
+    const { rows: existing } = await db.query(
+      `SELECT * FROM user_profiles WHERE user_id = $1 AND language = $2 AND concept = $3`,
       [userId, language, concept]
     );
 
-    // Fetch real total task count from all tiers for this language/concept/difficulty
-    const [problemCountRows] = await db.query(
-      `SELECT COUNT(*) AS total FROM problems WHERE language = ? AND concept = ? AND difficulty = ?`,
+    // Fetch real total task count
+    // SUPABASE (pg): COUNT(*) returns a string in pg — cast to int
+    const { rows: problemCountRows } = await db.query(
+      `SELECT COUNT(*) AS total FROM problems WHERE language = $1 AND concept = $2 AND difficulty = $3`,
       [language, concept, problem.difficulty || 'Easy']
     );
-    const totalTasksInDB = problemCountRows[0]?.total || 3;
+    const totalTasksInDB = parseInt(problemCountRows[0]?.total, 10) || 3;
 
     if (existing.length === 0) {
+      // SUPABASE (pg): $1–$10
       await db.query(
         `INSERT INTO user_profiles
          (user_id, language, concept, total_attempts, tasks_completed,
           total_tasks, success_rate, avg_time_spent, avg_attempts,
           syntax_errors, structural_errors, performance_level)
-         VALUES (?, ?, ?, 1, ?, ?, ?, ?, 1, ?, ?, 'Easy')`,
-        [userId, language, concept,
-         successValue, totalTasksInDB, successValue, timeSpent,
-         syntaxErrors, structuralErrors]
+         VALUES ($1, $2, $3, 1, $4, $5, $6, $7, 1, $8, $9, 'Easy')`,
+        [
+          userId, language, concept,
+          successValue, totalTasksInDB, successValue, timeSpent,
+          syntaxErrors, structuralErrors
+        ]
       );
     } else {
+      // SUPABASE (pg): $1–$9
       await db.query(
         `UPDATE user_profiles SET
            total_attempts    = total_attempts + 1,
-           tasks_completed   = tasks_completed + ?,
-           total_tasks       = ?,
-           success_rate      = (success_rate * total_attempts + ?) / (total_attempts + 1),
-           avg_time_spent    = (avg_time_spent * total_attempts + ?) / (total_attempts + 1),
+           tasks_completed   = tasks_completed + $1,
+           total_tasks       = $2,
+           success_rate      = (success_rate * total_attempts + $3) / (total_attempts + 1),
+           avg_time_spent    = (avg_time_spent * total_attempts + $4) / (total_attempts + 1),
            avg_attempts      = (avg_attempts  * total_attempts + 1) / (total_attempts + 1),
-           syntax_errors     = syntax_errors + ?,
-           structural_errors = structural_errors + ?
-         WHERE user_id = ? AND language = ? AND concept = ?`,
-        [successValue, totalTasksInDB, successValue, timeSpent,
-         syntaxErrors, structuralErrors,
-         userId, language, concept]
+           syntax_errors     = syntax_errors + $5,
+           structural_errors = structural_errors + $6
+         WHERE user_id = $7 AND language = $8 AND concept = $9`,
+        [
+          successValue, totalTasksInDB, successValue, timeSpent,
+          syntaxErrors, structuralErrors,
+          userId, language, concept
+        ]
       );
     }
 
     // ── 6. CART classification ───────────────────────────────────
-    const [profileRows] = await db.query(
+    // SUPABASE (pg): { rows } and $1–$3
+    const { rows: profileRows } = await db.query(
       `SELECT success_rate, avg_time_spent, avg_attempts,
               syntax_errors, structural_errors, performance_level
-       FROM user_profiles WHERE user_id = ? AND language = ? AND concept = ?`,
+       FROM user_profiles WHERE user_id = $1 AND language = $2 AND concept = $3`,
       [userId, language, concept]
     );
 
@@ -433,30 +462,24 @@ app.post('/api/submit', async (req, res) => {
       performance_level: 'Easy'
     };
 
-
-    const [hardSolves] = await db.query(
+    // SUPABASE (pg): { rows } and $1–$3
+    // pg returns COUNT as string — parse to int for comparison
+    const { rows: hardSolveRows } = await db.query(
       `SELECT COUNT(*) AS count
-      FROM submissions s
-      JOIN problems p
-        ON s.problem_id = p.id
-      WHERE s.user_id = ?
-        AND p.language = ?
-        AND p.concept = ?
-        AND p.problem_tier = 'Advanced'
-        AND s.is_correct = 1
-        AND s.attempts <= 2
-        AND s.hint_used = 0
-      `,
+       FROM submissions s
+       JOIN problems p ON s.problem_id = p.id
+       WHERE s.user_id = $1
+         AND p.language = $2
+         AND p.concept = $3
+         AND p.problem_tier = 'Advanced'
+         AND s.is_correct = true
+         AND s.attempts <= 2
+         AND s.hint_used = false`,
       [userId, language, concept]
     );
+    const hasHardEvidence = parseInt(hardSolveRows[0].count, 10) > 0;
 
-    const hasHardEvidence =
-    hardSolves[0].count > 0;
-
-    
     // ── CART ML classification ────────────────────────────────────
-    // Build the feature vector from the current profile snapshot.
-    // These are the exact same five features the model was trained on.
     const featureVector = {
       success_rate:      profile.success_rate      ?? 0,
       avg_attempts:      profile.avg_attempts      ?? attempts,
@@ -465,15 +488,11 @@ app.post('/api/submit', async (req, res) => {
       structural_errors: profile.structural_errors  ?? structuralErrors,
     };
 
-    // Use trained CART when available; fall back to heuristic rules
-    // if trainCart.js has not been run yet (e.g. fresh install).
     let level;
     if (cartReady) {
       level = cartModel.predict(featureVector);
       console.log(`🌳 CART predicted level="${level}" for user=${userId} concept=${concept}`);
     } else {
-      // Heuristic fallback (identical to previous behaviour — keeps the
-      // server working on day 1 before trainCart.js is run)
       if (
         featureVector.success_rate      >= 0.80 &&
         featureVector.avg_attempts      <= 2    &&
@@ -490,55 +509,37 @@ app.post('/api/submit', async (req, res) => {
     }
 
     if (userId) {
+      // SUPABASE (pg): $1–$4
       await db.query(
-        `UPDATE user_profiles SET performance_level = ?
-         WHERE user_id = ? AND language = ? AND concept = ?`,
+        `UPDATE user_profiles SET performance_level = $1
+         WHERE user_id = $2 AND language = $3 AND concept = $4`,
         [level, userId, language, concept]
       );
     }
 
-    // CHANGE 2: Convert CART level to problem_tier for the frontend
-    // This tells CodeEditor which tier to fetch next
-    let nextTier = cartLevelToTier(level);
-
+    let nextTier   = cartLevelToTier(level);
     let tierReason = null;
 
-    if (
-      nextTier === 'Advanced' &&
-      shouldDemote(
-        profile,
-        finalCorrect,
-        attempts,
-        hintUsed,
-        hasHardEvidence
-      )
-    ) {
-      nextTier = 'Intermediate';
-
-      tierReason =
-        'We are giving you an Intermediate exercise to strengthen this concept before continuing with Advanced problems.';
+    if (nextTier === 'Advanced' && shouldDemote(profile, finalCorrect, attempts, hintUsed, hasHardEvidence)) {
+      nextTier   = 'Intermediate';
+      tierReason = 'We are giving you an Intermediate exercise to strengthen this concept before continuing with Advanced problems.';
     }
 
-    if (
-      nextTier === 'Intermediate' &&
-      shouldDemoteToEasy(
-        profile,
-        attempts,
-        structuralErrors
-      )
-    ) {
-      nextTier = 'Beginner';
-
-      tierReason =
-        'We are revisiting the fundamentals of this concept to build a stronger foundation.';
+    if (nextTier === 'Intermediate' && shouldDemoteToEasy(profile, attempts, structuralErrors)) {
+      nextTier   = 'Beginner';
+      tierReason = 'We are revisiting the fundamentals of this concept to build a stronger foundation.';
     }
+
     // ── 7. Update daily_progress ─────────────────────────────────
     const today = new Date().toISOString().slice(0, 10);
     const score = Math.round(profile.success_rate * 100);
     if (userId) {
+      // SUPABASE (pg): ON CONFLICT replaces MySQL's ON DUPLICATE KEY UPDATE
+      // Requires a UNIQUE constraint on (user_id, language, progress_date) in your schema
       await db.query(
         `INSERT INTO daily_progress (user_id, language, progress_date, score)
-         VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE score = ?`,
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, language, progress_date) DO UPDATE SET score = $5`,
         [userId, language, today, score, score]
       );
     }
@@ -546,8 +547,9 @@ app.post('/api/submit', async (req, res) => {
     // ── 8. Cosine similarity recommendation ──────────────────────
     const updatedProfile = { ...profile, performance_level: level };
 
-    const [allProblems] = await db.query(
-      `SELECT * FROM problems WHERE language = ?`,
+    // SUPABASE (pg): { rows } and $1
+    const { rows: allProblems } = await db.query(
+      `SELECT * FROM problems WHERE language = $1`,
       [language]
     );
 
@@ -556,50 +558,64 @@ app.post('/api/submit', async (req, res) => {
 
     // ── 9. Save to recommendations table ─────────────────────────
     if (recommended && userId) {
-      const [existingRec] = await db.query(
-        `SELECT id FROM recommendations
-         WHERE user_id = ? AND source_problem_id = ?`,
+      // SUPABASE (pg): { rows } and $1–$2
+      const { rows: existingRec } = await db.query(
+        `SELECT id FROM recommendations WHERE user_id = $1 AND source_problem_id = $2`,
         [userId, problemId]
       );
 
       if (existingRec.length === 0) {
+        // SUPABASE (pg): NOW() works in both MySQL and PostgreSQL
         await db.query(
           `INSERT INTO recommendations
            (user_id, source_problem_id, recommended_problem_id,
             similarity_score, explanation, created_at)
-           VALUES (?, ?, ?, ?, ?, NOW())`,
+           VALUES ($1, $2, $3, $4, $5, NOW())`,
           [userId, problemId, recommended.id, similarityScore, explanation]
         );
       } else {
+        // SUPABASE (pg): $1–$5
         await db.query(
           `UPDATE recommendations SET
-             recommended_problem_id = ?,
-             similarity_score       = ?,
-             explanation            = ?,
+             recommended_problem_id = $1,
+             similarity_score       = $2,
+             explanation            = $3,
              created_at             = NOW()
-           WHERE user_id = ? AND source_problem_id = ?`,
+           WHERE user_id = $4 AND source_problem_id = $5`,
           [recommended.id, similarityScore, explanation, userId, problemId]
         );
       }
     }
 
     // ── 10. Return full result ────────────────────────────────────
+    // Check mastery: all tasks solved with ≥60% success
+    const { rows: masterCheck } = await db.query(
+      `SELECT tasks_completed, total_tasks, success_rate
+       FROM user_profiles WHERE user_id = $1 AND language = $2 AND concept = $3`,
+      [userId, language, concept]
+    );
+    const mr         = masterCheck[0];
+    const isMastered = mr
+      ? mr.tasks_completed >= mr.total_tasks && (mr.success_rate * 100) >= 60
+      : false;
+
     res.json({
-      success:          true,
-      level,                  // 'Easy' | 'Intermediate' | 'Hard'  (CART output)
-      nextTier,               // 'Beginner' | 'Intermediate' | 'Advanced'  (NEW — for frontend fetch)
-      correct:          finalCorrect,
+      success:         true,
+      level,
+      nextTier,
+      correct:         finalCorrect,
       syntaxErrors,
       structuralErrors,
       cfgFeedback,
       constructUsed,
+      isMastered,
       recommendation: recommended
         ? {
             id:              recommended.id,
             title:           recommended.title,
             concept:         recommended.concept,
             difficulty:      recommended.difficulty,
-            problem_tier:    recommended.problem_tier,   // NEW — included in recommendation
+            problem_tier:    recommended.problem_tier,
             language:        recommended.language,
             similarityScore,
             explanation
@@ -613,7 +629,6 @@ app.post('/api/submit', async (req, res) => {
   }
 });
 
-
 /* ══════════════════════════════════════
    API — GET RECOMMENDATIONS for a user
 ══════════════════════════════════════ */
@@ -621,7 +636,8 @@ app.get('/api/recommendations/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const [rows] = await db.query(
+    // SUPABASE (pg): { rows } and $1
+    const { rows } = await db.query(
       `SELECT
          r.id,
          r.similarity_score,
@@ -641,7 +657,7 @@ app.get('/api/recommendations/:userId', async (req, res) => {
        FROM recommendations r
        JOIN problems sp ON r.source_problem_id      = sp.id
        JOIN problems rp ON r.recommended_problem_id = rp.id
-       WHERE r.user_id = ?
+       WHERE r.user_id = $1
        ORDER BY r.created_at DESC
        LIMIT 10`,
       [userId]
@@ -654,30 +670,35 @@ app.get('/api/recommendations/:userId', async (req, res) => {
   }
 });
 
-
 /* ══════════════════════════════════════
    API — GET PROGRESS (for ProfilePage)
 ══════════════════════════════════════ */
 app.get('/api/progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const [rows] = await db.query(
+
+    // SUPABASE (pg): { rows } and $1
+    const { rows } = await db.query(
       `SELECT language, concept, tasks_completed, total_tasks,
               success_rate, performance_level, syntax_errors, structural_errors
-       FROM user_profiles WHERE user_id = ?`,
+       FROM user_profiles WHERE user_id = $1`,
       [userId]
     );
 
     const progress = {};
     rows.forEach(row => {
       if (!progress[row.language]) progress[row.language] = {};
+      const tasksCompleted = row.tasks_completed;
+      const totalTasks     = row.total_tasks;
+      const successRate    = Math.round(row.success_rate * 100);
       progress[row.language][row.concept] = {
-        tasksCompleted:   row.tasks_completed,
-        totalTasks:       row.total_tasks,
-        successRate:      Math.round(row.success_rate * 100),
+        tasksCompleted,
+        totalTasks,
+        successRate,
         performanceLevel: row.performance_level,
         syntaxErrors:     row.syntax_errors,
-        structuralErrors: row.structural_errors
+        structuralErrors: row.structural_errors,
+        mastered:         tasksCompleted >= totalTasks && successRate >= 60,
       };
     });
     res.json(progress);
@@ -687,16 +708,20 @@ app.get('/api/progress/:userId', async (req, res) => {
   }
 });
 
-
+/* ══════════════════════════════════════
+   API — GET DAILY PROGRESS
+══════════════════════════════════════ */
 app.get('/api/daily-progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const [rows] = await db.query(
+    // SUPABASE (pg): DATE_SUB(CURDATE(), INTERVAL 14 DAY) →
+    //                CURRENT_DATE - INTERVAL '14 days'
+    const { rows } = await db.query(
       `SELECT progress_date, language, score
        FROM daily_progress
-       WHERE user_id = ?
-         AND progress_date >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+       WHERE user_id = $1
+         AND progress_date >= CURRENT_DATE - INTERVAL '14 days'
        ORDER BY progress_date ASC, language ASC`,
       [userId]
     );
@@ -708,12 +733,9 @@ app.get('/api/daily-progress/:userId', async (req, res) => {
   }
 });
 
-
 /* ══════════════════════════════════════
    API — RETRAIN CART MODEL
    POST /api/retrain
-   Triggers trainCart.js as a child process.
-   Returns the new model's tree summary.
 ══════════════════════════════════════ */
 app.post('/api/retrain', async (req, res) => {
   const scriptPath = path.join(__dirname, 'utils', 'trainCart.js');
@@ -728,7 +750,6 @@ app.post('/api/retrain', async (req, res) => {
       return res.status(500).json({ error: 'Training failed', details: stderr || err.message });
     }
 
-    // Reload the newly written model
     try {
       const exported = JSON.parse(fs.readFileSync(CART_MODEL_PATH, 'utf8'));
       cartModel.importTree(exported);
@@ -750,12 +771,11 @@ app.post('/api/retrain', async (req, res) => {
 /* ══════════════════════════════════════
    API — INSPECT CART MODEL
    GET /api/cart-model
-   Returns the loaded tree structure and metadata.
 ══════════════════════════════════════ */
 app.get('/api/cart-model', (req, res) => {
   if (!cartReady) {
     return res.status(503).json({
-      ready: false,
+      ready:   false,
       message: 'CART model not loaded. Run: node utils/trainCart.js',
     });
   }
@@ -767,13 +787,13 @@ app.get('/api/cart-model', (req, res) => {
 ══════════════════════════════════════ */
 app.get('/api/test', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT COUNT(*) AS total FROM problems');
-    res.json({ status: 'connected', problems: rows[0].total });
+    // SUPABASE (pg): { rows } — COUNT(*) returns string, cast to int
+    const { rows } = await db.query('SELECT COUNT(*) AS total FROM problems');
+    res.json({ status: 'connected', problems: parseInt(rows[0].total, 10) });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
-
 
 /* ══════════════════════════════════════
    START SERVER

@@ -24,9 +24,9 @@
 
 'use strict';
 
-const path             = require('path');
-const fs               = require('fs');
-const db               = require('../db');
+const path               = require('path');
+const fs                 = require('fs');
+const db                 = require('../db');
 const { CARTClassifier } = require('./cartModel');
 
 // Minimum rows required before we try to use DB labels.
@@ -97,8 +97,9 @@ async function main() {
   let rows = [];
 
   // 1. Try loading from DB
+  // SUPABASE (pg): use { rows } instead of [rows], no ? placeholders needed here
   try {
-    const [dbRows] = await db.query(`
+    const { rows: dbRows } = await db.query(`
       SELECT
         success_rate,
         avg_attempts,
@@ -129,10 +130,10 @@ async function main() {
   console.log(`📊 Total training samples: ${rows.length}`);
 
   // 3. Shuffle and split 80/20
-  const shuffled   = shuffle(rows);
-  const splitAt    = Math.floor(shuffled.length * 0.8);
-  const trainRows  = shuffled.slice(0, splitAt);
-  const testRows   = shuffled.slice(splitAt);
+  const shuffled  = shuffle(rows);
+  const splitAt   = Math.floor(shuffled.length * 0.8);
+  const trainRows = shuffled.slice(0, splitAt);
+  const testRows  = shuffled.slice(splitAt);
 
   const features = ['success_rate', 'avg_attempts', 'avg_time_spent', 'syntax_errors', 'structural_errors'];
   const trainX   = trainRows.map(r => Object.fromEntries(features.map(f => [f, r[f]])));
@@ -163,7 +164,7 @@ async function main() {
   }
 
   // 7. Save model
-  const outPath = path.join(__dirname, 'cart_model.json');
+  const outPath  = path.join(__dirname, 'cart_model.json');
   const exported = cart.exportTree();
   fs.writeFileSync(outPath, JSON.stringify(exported, null, 2), 'utf8');
   console.log(`\n💾 Model saved → ${outPath}`);
@@ -171,6 +172,8 @@ async function main() {
   console.log(`   Max depth  : ${exported.meta.max_depth}`);
   console.log(`   Features   : ${exported.meta.features.join(', ')}`);
 
+  // SUPABASE (pg): close the pool so the script can exit cleanly
+  await db.end();
   process.exit(0);
 }
 

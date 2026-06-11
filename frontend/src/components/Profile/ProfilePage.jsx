@@ -292,7 +292,7 @@ const ProfilePage = ({
                   </div>
                   <div className={styles.accomplishBar}>
                     <div className={styles.accomplishFill} style={{
-                      width:`${masteryPct}%`,
+                      width: isMastered ? '100%' : `${masteryPct}%`,
                       background: isMastered ? '#4ade80' : masteryPct >= 50 ? '#facc15' : masteryPct > 0 ? '#60a5fa' : '#334155'
                     }} />
                   </div>

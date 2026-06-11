@@ -1,15 +1,17 @@
-// db.js
+// db.js (POSTGRES / SUPABASE)
 require('dotenv').config();
-const mysql = require('mysql2');
+const { Pool } = require('pg');
 
-const db = mysql.createPool({
-  host:     process.env.DB_HOST || 'localhost',
-  user:     process.env.DB_USER || 'root',
-  password: process.env.DB_PASS || 'root',
-  database: process.env.DB_NAME || 'codapt_system',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+  
 });
 
-module.exports = db.promise();
+db.on('error', (err) => {
+  console.error('Unexpected DB pool error:', err.message);
+});
+
+module.exports = db;
