@@ -40,6 +40,63 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+const adminState = {
+  bannedUsers: new Set(),
+  content: {
+    courses: [
+      { id: 1, title: 'Python Basics', language: 'Python', lessons: 12, status: 'Active', enrolled: 450 },
+      { id: 2, title: 'JavaScript Fundamentals', language: 'JavaScript', lessons: 15, status: 'Active', enrolled: 380 },
+      { id: 3, title: 'Java OOP', language: 'Java', lessons: 10, status: 'Active', enrolled: 220 },
+      { id: 4, title: 'Python Advanced', language: 'Python', lessons: 8, status: 'Draft', enrolled: 0 },
+      { id: 5, title: 'React.js Basics', language: 'JavaScript', lessons: 18, status: 'Active', enrolled: 290 },
+      { id: 6, title: 'Data Structures', language: 'Python', lessons: 20, status: 'Active', enrolled: 180 },
+      { id: 7, title: 'Java Spring Boot', language: 'Java', lessons: 14, status: 'Active', enrolled: 150 },
+      { id: 8, title: 'Node.js Backend', language: 'JavaScript', lessons: 12, status: 'Active', enrolled: 200 },
+      { id: 9, title: 'Machine Learning Intro', language: 'Python', lessons: 16, status: 'Draft', enrolled: 0 },
+      { id: 10, title: 'Android Development', language: 'Java', lessons: 22, status: 'Active', enrolled: 95 },
+      { id: 11, title: 'Python GUI Programming', language: 'Python', lessons: 10, status: 'Active', enrolled: 75 },
+      { id: 12, title: 'ES6 JavaScript', language: 'JavaScript', lessons: 8, status: 'Active', enrolled: 120 }
+    ],
+    languages: [
+      { id: 1, name: 'Python', icon: '🐍', color: '#3776AB', courses: 4, students: 725 },
+      { id: 2, name: 'JavaScript', icon: '📜', color: '#F7DF1E', courses: 4, students: 990 },
+      { id: 3, name: 'Java', icon: '☕', color: '#007396', courses: 4, students: 545 }
+    ]
+  },
+  settings: {
+    recommendationEngine: true,
+    cfgValidation: true,
+    hardcodedAnswerDetection: true
+  },
+  reports: {
+    performanceData: [
+      { name: "Jan '24", success: 15, score: 10 },
+      { name: "Feb '24", success: 18, score: 14 },
+      { name: "Mar '24", success: 20, score: 16 },
+      { name: "Apr '24", success: 21, score: 17 },
+      { name: "May '24", success: 22, score: 19 }
+    ],
+    topics: [
+      { name: 'Array & Strings', count: 845, color: '#76D7A4' },
+      { name: 'Conditionals', count: 645, color: '#F1C40F' },
+      { name: 'Loops', count: 552, color: '#76D7A4' },
+      { name: 'Input Handling', count: 471, color: '#F1C40F' },
+      { name: 'Functions', count: 442, color: '#76D7A4' },
+      { name: 'Recursion', count: 298, color: '#F1C40F' }
+    ],
+    pieData: [
+      { name: 'Syntax Errors', value: 43, color: '#EE6666' },
+      { name: 'Logic Errors', value: 25, color: '#FAC858' },
+      { name: 'Other Errors', value: 32, color: '#5470C6' },
+      { name: 'Semantic', value: 23, color: '#91CC75' }
+    ]
+  }
+};
+
+function getNextId(items) {
+  return items.reduce((maxId, item) => Math.max(maxId, item.id || 0), 0) + 1;
+}
+
 /* ─────────────────────────────────────
    HELPER — SHA-256 password hash
 ───────────────────────────────────── */
@@ -741,7 +798,7 @@ app.get('/api/admin/users', async (req, res) => {
       completedLessons: Number(row.tasks_completed),
       certificates: Number(row.concepts_count),
       lastActive: row.last_active || 'Unknown',
-      isBanned: false,
+      isBanned: adminState.bannedUsers.has(row.id),
       scores: {
         python: 0,
         javascript: 0,
@@ -754,6 +811,213 @@ app.get('/api/admin/users', async (req, res) => {
     console.error('❌ GET ADMIN USERS:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.put('/api/admin/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { name, email, action } = req.body;
+
+    if (action === 'ban') {
+      adminState.bannedUsers.add(Number(userId));
+    } else if (action === 'unban') {
+      adminState.bannedUsers.delete(Number(userId));
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (name) {
+      fields.push(`name = $${idx++}`);
+      values.push(name);
+    }
+    if (email) {
+      fields.push(`email = $${idx++}`);
+      values.push(email);
+    }
+
+    if (fields.length > 0) {
+      values.push(userId);
+      await db.query(
+        `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx}`,
+        values
+      );
+    }
+
+    const { rows } = await db.query(
+      'SELECT id, name, username, email, photo FROM users WHERE id = $1',
+      [userId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+
+    const user = rows[0];
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        photo: user.photo || null,
+        isBanned: adminState.bannedUsers.has(user.id)
+      }
+    });
+  } catch (err) {
+    console.error('❌ UPDATE ADMIN USER:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/users/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await db.query('DELETE FROM users WHERE id = $1', [userId]);
+    adminState.bannedUsers.delete(Number(userId));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ DELETE ADMIN USER:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/users/:userId/reset-password', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rows } = await db.query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
+    res.json({ success: true, message: 'Password reset email has been queued.' });
+  } catch (err) {
+    console.error('❌ RESET ADMIN USER PASSWORD:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/content', (req, res) => {
+  res.json(adminState.content);
+});
+
+app.post('/api/admin/content/courses', (req, res) => {
+  try {
+    const { title, language, lessons } = req.body;
+    if (!title || !language || lessons === undefined) {
+      return res.status(400).json({ error: 'Title, language, and lessons are required.' });
+    }
+    const course = {
+      id: getNextId(adminState.content.courses),
+      title,
+      language,
+      lessons: Number(lessons),
+      status: 'Active',
+      enrolled: 0
+    };
+    adminState.content.courses.push(course);
+    res.status(201).json(course);
+  } catch (err) {
+    console.error('❌ CREATE ADMIN COURSE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/content/courses/:courseId', (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    adminState.content.courses = adminState.content.courses.filter(c => c.id !== courseId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ DELETE ADMIN COURSE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/content/courses/:courseId', (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const { title, language, lessons, status } = req.body;
+    const course = adminState.content.courses.find(c => c.id === courseId);
+    if (!course) return res.status(404).json({ error: 'Course not found.' });
+    if (title) course.title = title;
+    if (language) course.language = language;
+    if (lessons !== undefined) course.lessons = Number(lessons);
+    if (status) course.status = status;
+    res.json(course);
+  } catch (err) {
+    console.error('❌ UPDATE ADMIN COURSE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/content/languages', (req, res) => {
+  try {
+    const { name, icon } = req.body;
+    if (!name || !icon) {
+      return res.status(400).json({ error: 'Name and icon are required.' });
+    }
+    const language = {
+      id: getNextId(adminState.content.languages),
+      name,
+      icon,
+      color: '#2D58A6',
+      courses: 0,
+      students: 0
+    };
+    adminState.content.languages.push(language);
+    res.status(201).json(language);
+  } catch (err) {
+    console.error('❌ CREATE ADMIN LANGUAGE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/content/languages/:languageId', (req, res) => {
+  try {
+    const languageId = Number(req.params.languageId);
+    adminState.content.languages = adminState.content.languages.filter(l => l.id !== languageId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ DELETE ADMIN LANGUAGE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/content/languages/:languageId', (req, res) => {
+  try {
+    const languageId = Number(req.params.languageId);
+    const { name, icon, color } = req.body;
+    const language = adminState.content.languages.find(l => l.id === languageId);
+    if (!language) return res.status(404).json({ error: 'Language not found.' });
+    if (name) language.name = name;
+    if (icon) language.icon = icon;
+    if (color) language.color = color;
+    res.json(language);
+  } catch (err) {
+    console.error('❌ UPDATE ADMIN LANGUAGE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/settings', (req, res) => {
+  res.json(adminState.settings);
+});
+
+app.put('/api/admin/settings', (req, res) => {
+  try {
+    const updates = req.body;
+    const allowed = ['recommendationEngine', 'cfgValidation', 'hardcodedAnswerDetection'];
+    Object.keys(updates).forEach(key => {
+      if (allowed.includes(key) && typeof updates[key] === 'boolean') {
+        adminState.settings[key] = updates[key];
+      }
+    });
+    res.json(adminState.settings);
+  } catch (err) {
+    console.error('❌ UPDATE ADMIN SETTINGS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/reports', (req, res) => {
+  res.json(adminState.reports);
 });
 
 /* ══════════════════════════════════════

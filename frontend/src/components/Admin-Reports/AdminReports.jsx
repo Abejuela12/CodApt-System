@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell 
@@ -6,31 +6,31 @@ import {
 import styles from './AdminReports.module.css';
 
 const AdminReports = () => {
-  // Data for the Performance Graph
-  const performanceData = [
-    { name: "Jan '24", success: 15, score: 10 },
-    { name: "Feb '24", success: 18, score: 14 },
-    { name: "Mar '24", success: 20, score: 16 },
-    { name: "Apr '24", success: 21, score: 17 },
-    { name: "May '24", success: 22, score: 19 },
-  ];
+  const [performanceData, setPerformanceData] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [pieData, setPieData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const topics = [
-    { name: "Array & Strings", count: 845, color: "#76D7A4" },
-    { name: "Conditionals", count: 645, color: "#F1C40F" },
-    { name: "Loops", count: 552, color: "#76D7A4" },
-    { name: "Input Handling", count: 471, color: "#F1C40F" },
-    { name: "Functions", count: 442, color: "#76D7A4" },
-    { name: "Recursion", count: 298, color: "#F1C40F" },
-  ];
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/reports');
+        if (!response.ok) throw new Error('Failed to load report data');
+        const data = await response.json();
+        setPerformanceData(data.performanceData || []);
+        setTopics(data.topics || []);
+        setPieData(data.pieData || []);
+      } catch (err) {
+        console.error('Admin reports fetch error:', err);
+        setError('Unable to load report data.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Data for the Pie Chart
-  const pieData = [
-    { name: 'Syntax Errors', value: 43, color: '#EE6666' },
-    { name: 'Logic Errors', value: 25, color: '#FAC858' },
-    { name: 'Other Errors', value: 32, color: '#5470C6' },
-    { name: 'Semantic', value: 23, color: '#91CC75' },
-  ];
+    fetchReports();
+  }, []);
 
   return (
     <div className={styles.container}>
@@ -43,13 +43,14 @@ const AdminReports = () => {
       </div>
 
       <div className={styles.statsRow}>
+        {error && <div className={styles.errorMessage}>{error}</div>}
         <div className={styles.statCard}>
           <div className={styles.statIconWrapper}>
             <div className={styles.iconCircle} style={{backgroundColor: '#E6F4EA'}}>📈</div>
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Avg Score</span>
-            <h2 className={styles.statValue}>30%</h2>
+            <h2 className={styles.statValue}>{loading ? '…' : performanceData.length ? `${Math.round(performanceData.reduce((sum, item) => sum + item.score, 0) / performanceData.length)}%` : '0%'}</h2>
           </div>
         </div>
         <div className={styles.statCard}>
@@ -58,7 +59,7 @@ const AdminReports = () => {
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Average Progress</span>
-            <h2 className={styles.statValue}>30%</h2>
+            <h2 className={styles.statValue}>{loading ? '…' : performanceData.length ? `${Math.round(performanceData.reduce((sum, item) => sum + item.success, 0) / performanceData.length)}%` : '0%'}</h2>
           </div>
         </div>
       </div>

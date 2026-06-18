@@ -65,12 +65,24 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
     setShowEditModal(true);
   };
 
-  const saveEdit = () => {
-    setUsers(users.map(u => 
-      u.id === selectedUser.id ? { ...u, name: editForm.name, email: editForm.email } : u
-    ));
-    setSelectedUser({ ...selectedUser, name: editForm.name, email: editForm.email });
-    setShowEditModal(false);
+  const saveEdit = async () => {
+    if (!selectedUser) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/admin/users/${selectedUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editForm.name, email: editForm.email })
+      });
+      if (!response.ok) throw new Error('Failed to update user');
+      const data = await response.json();
+      const updatedUser = { ...selectedUser, ...data.user };
+      setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+      setSelectedUser(updatedUser);
+      setShowEditModal(false);
+    } catch (err) {
+      console.error('Admin update user error:', err);
+      setError('Unable to save changes.');
+    }
   };
 
   const openActionModal = (user, action) => {
@@ -79,22 +91,47 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
     setShowActionModal(true);
   };
 
-  const confirmAction = () => {
-    if (actionType === 'delete') {
-      setUsers(users.filter(u => u.id !== selectedUser.id));
-    } else if (actionType === 'ban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: true } : u
-      ));
-    } else if (actionType === 'unban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: false } : u
-      ));
-    } else if (actionType === 'reset') {
-      alert(`Password reset link sent to ${selectedUser.email}`);
+  const confirmAction = async () => {
+    if (!selectedUser) return;
+
+    try {
+      let url = `http://localhost:5000/api/admin/users/${selectedUser.id}`;
+      let options = { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: null };
+
+      if (actionType === 'delete') {
+        options.method = 'DELETE';
+        options.body = null;
+      } else if (actionType === 'ban' || actionType === 'unban') {
+        options.body = JSON.stringify({ action: actionType });
+      } else if (actionType === 'reset') {
+        url += '/reset-password';
+        options.method = 'POST';
+        options.body = JSON.stringify({});
+      }
+
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        throw new Error('Admin action failed');
+      }
+
+      if (actionType === 'delete') {
+        setUsers(users.filter(u => u.id !== selectedUser.id));
+      } else if (actionType === 'ban' || actionType === 'unban') {
+        const data = await response.json();
+        const updatedUser = { ...selectedUser, ...data.user };
+        setUsers(users.map(u => u.id === selectedUser.id ? updatedUser : u));
+        setSelectedUser(updatedUser);
+      } else if (actionType === 'reset') {
+        const result = await response.json();
+        alert(result.message || `Password reset link sent to ${selectedUser.email}`);
+      }
+    } catch (err) {
+      console.error('Admin action error:', err);
+      setError('Unable to complete action.');
+    } finally {
+      setShowActionModal(false);
+      setSelectedUser(null);
     }
-    setShowActionModal(false);
-    setSelectedUser(null);
   };
 
   return (

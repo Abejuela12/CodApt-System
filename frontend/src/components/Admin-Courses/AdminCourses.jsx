@@ -1,69 +1,98 @@
- import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AdminCourses.module.css';
 
 const AdminCourses = () => {
-  const [courses, setCourses] = useState([
-    { id: 1, title: "Python Basics", language: "Python", lessons: 12, status: "Active", enrolled: 450 },
-    { id: 2, title: "JavaScript Fundamentals", language: "JavaScript", lessons: 15, status: "Active", enrolled: 380 },
-    { id: 3, title: "Java OOP", language: "Java", lessons: 10, status: "Active", enrolled: 220 },
-    { id: 4, title: "Python Advanced", language: "Python", lessons: 8, status: "Draft", enrolled: 0 },
-    { id: 5, title: "React.js Basics", language: "JavaScript", lessons: 18, status: "Active", enrolled: 290 },
-    { id: 6, title: "Data Structures", language: "Python", lessons: 20, status: "Active", enrolled: 180 },
-    { id: 7, title: "Java Spring Boot", language: "Java", lessons: 14, status: "Active", enrolled: 150 },
-    { id: 8, title: "Node.js Backend", language: "JavaScript", lessons: 12, status: "Active", enrolled: 200 },
-    { id: 9, title: "Machine Learning Intro", language: "Python", lessons: 16, status: "Draft", enrolled: 0 },
-    { id: 10, title: "Android Development", language: "Java", lessons: 22, status: "Active", enrolled: 95 },
-    { id: 11, title: "Python GUI Programming", language: "Python", lessons: 10, status: "Active", enrolled: 75 },
-    { id: 12, title: "ES6 JavaScript", language: "JavaScript", lessons: 8, status: "Active", enrolled: 120 },
-  ]);
-
-  const [languages, setLanguages] = useState([
-    { id: 1, name: "Python", icon: "🐍", color: "#3776AB", courses: 4, students: 725 },
-    { id: 2, name: "JavaScript", icon: "📜", color: "#F7DF1E", courses: 4, students: 990 },
-    { id: 3, name: "Java", icon: "☕", color: "#007396", courses: 4, students: 545 },
-  ]);
-
+  const [courses, setCourses] = useState([]);
+  const [languages, setLanguages] = useState([]);
   const [activeTab, setActiveTab] = useState('courses');
   const [showAddCourse, setShowAddCourse] = useState(false);
   const [showAddLanguage, setShowAddLanguage] = useState(false);
   const [newCourse, setNewCourse] = useState({ title: '', language: 'Python', lessons: 0 });
   const [newLanguage, setNewLanguage] = useState({ name: '', icon: '' });
+  const [error, setError] = useState(null);
 
-  const addCourse = () => {
-    if (newCourse.title) {
-      const course = {
-        id: courses.length + 1,
-        ...newCourse,
-        status: "Active",
-        enrolled: 0
-      };
-      setCourses([...courses, course]);
-      setNewCourse({ title: '', language: 'Python', lessons: 0 });
+  useEffect(() => {
+    const fetchContent = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/content');
+        if (!response.ok) throw new Error('Failed to load content');
+        const data = await response.json();
+        setCourses(data.courses || []);
+        setLanguages(data.languages || []);
+        if (data.languages && data.languages.length > 0 && !newCourse.language) {
+          setNewCourse(prev => ({ ...prev, language: data.languages[0].name }));
+        }
+      } catch (err) {
+        console.error('Admin content fetch error:', err);
+        setError('Unable to load admin content.');
+      }
+    };
+
+    fetchContent();
+  }, []);
+
+  const addCourse = async () => {
+    if (!newCourse.title) return;
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/content/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCourse)
+      });
+      if (!response.ok) throw new Error('Failed to add course');
+      const createdCourse = await response.json();
+      setCourses(prev => [...prev, createdCourse]);
+      setNewCourse({ title: '', language: newCourse.language || 'Python', lessons: 0 });
       setShowAddCourse(false);
+    } catch (err) {
+      console.error('Add course error:', err);
+      setError('Unable to save course.');
     }
   };
 
-  const deleteCourse = (id) => {
-    setCourses(courses.filter(course => course.id !== id));
+  const deleteCourse = async (id) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/admin/content/courses/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete course');
+      setCourses(prev => prev.filter(course => course.id !== id));
+    } catch (err) {
+      console.error('Delete course error:', err);
+      setError('Unable to delete course.');
+    }
   };
 
-  const addLanguage = () => {
-    if (newLanguage.name && newLanguage.icon) {
-      const language = {
-        id: languages.length + 1,
-        ...newLanguage,
-        color: "#2D58A6",
-        courses: 0,
-        students: 0
-      };
-      setLanguages([...languages, language]);
+  const addLanguage = async () => {
+    if (!newLanguage.name || !newLanguage.icon) return;
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/content/languages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newLanguage)
+      });
+      if (!response.ok) throw new Error('Failed to add language');
+      const createdLanguage = await response.json();
+      setLanguages(prev => [...prev, createdLanguage]);
       setNewLanguage({ name: '', icon: '' });
       setShowAddLanguage(false);
+    } catch (err) {
+      console.error('Add language error:', err);
+      setError('Unable to save language.');
     }
   };
 
-  const deleteLanguage = (id) => {
-    setLanguages(languages.filter(lang => lang.id !== id));
+  const deleteLanguage = async (id) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/admin/content/languages/${id}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to delete language');
+      setLanguages(prev => prev.filter(lang => lang.id !== id));
+    } catch (err) {
+      console.error('Delete language error:', err);
+      setError('Unable to delete language.');
+    }
   };
 
   return (
@@ -71,6 +100,9 @@ const AdminCourses = () => {
       <h1 className={styles.panelTitle}>Content Management</h1>
 
       <div className={styles.statsRow}>
+        {error && (
+          <div className={styles.errorMessage}>{error}</div>
+        )}
         <div className={styles.statCard}>
           <span className={styles.statEmoji}>📚</span>
           <div className={styles.statInfo}>
