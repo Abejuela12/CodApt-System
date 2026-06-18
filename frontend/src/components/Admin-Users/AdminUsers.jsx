@@ -1,27 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AdminUsers.module.css';
 
-const UsersPanel = () => {
-  const [users, setUsers] = useState([
-    { id: 1, name: "Marian R", email: "marian@gmail.com", progress: 74, color: "#76D7A4", enrolledDate: "2024-01-15", lastActive: "2024-03-20", scores: { python: 85, javascript: 78, java: 92 }, completedLessons: 45, certificates: 3, isBanned: false },
-    { id: 2, name: "Samantha V", email: "sam@gmail.com", progress: 32, color: "#F1C40F", enrolledDate: "2024-02-01", lastActive: "2024-03-18", scores: { python: 45, javascript: 52, java: 38 }, completedLessons: 18, certificates: 1, isBanned: false },
-    { id: 3, name: "Ana L", email: "ana@gmail.com", progress: 61, color: "#76D7A4", enrolledDate: "2024-01-20", lastActive: "2024-03-19", scores: { python: 72, javascript: 68, java: 75 }, completedLessons: 38, certificates: 2, isBanned: false },
-    { id: 4, name: "Mark N", email: "mark@gmail.com", progress: 73, color: "#76D7A4", enrolledDate: "2024-01-10", lastActive: "2024-03-20", scores: { python: 88, javascript: 82, java: 79 }, completedLessons: 42, certificates: 3, isBanned: false },
-    { id: 5, name: "Wynona K", email: "Wyn@gmail.com", progress: 41, color: "#F1C40F", enrolledDate: "2024-02-05", lastActive: "2024-03-15", scores: { python: 55, javascript: 48, java: 52 }, completedLessons: 22, certificates: 1, isBanned: false },
-    { id: 6, name: "Rainier P", email: "rainier@gmail.com", progress: 19, color: "#E74C3C", enrolledDate: "2024-02-10", lastActive: "2024-03-10", scores: { python: 28, javascript: 22, java: 25 }, completedLessons: 8, certificates: 0, isBanned: true },
-    { id: 7, name: "Catherine S", email: "cath@gmail.com", progress: 52, color: "#76D7A4", enrolledDate: "2024-01-25", lastActive: "2024-03-17", scores: { python: 65, javascript: 58, java: 62 }, completedLessons: 30, certificates: 2, isBanned: false },
-    { id: 8, name: "Donn T", email: "don@gmail.com", progress: 55, color: "#76D7A4", enrolledDate: "2024-01-18", lastActive: "2024-03-19", scores: { python: 68, javascript: 72, java: 58 }, completedLessons: 32, certificates: 2, isBanned: false },
-    { id: 9, name: "Javier Q", email: "javier@gmail.com", progress: 30, color: "#F1C40F", enrolledDate: "2024-02-08", lastActive: "2024-03-14", scores: { python: 42, javascript: 35, java: 40 }, completedLessons: 16, certificates: 0, isBanned: false },
-    { id: 10, name: "Selena O", email: "selena@gmail.com", progress: 39, color: "#F1C40F", enrolledDate: "2024-02-03", lastActive: "2024-03-16", scores: { python: 48, javascript: 52, java: 45 }, completedLessons: 20, certificates: 1, isBanned: false },
-    { id: 11, name: "Hazel M", email: "hazel@gmail.com", progress: 53, color: "#76D7A4", enrolledDate: "2024-01-22", lastActive: "2024-03-18", scores: { python: 62, javascript: 58, java: 65 }, completedLessons: 31, certificates: 2, isBanned: false },
-  ]);
-
+const UsersPanel = ({ users: initialUsers = [] }) => {
+  const [users, setUsers] = useState(initialUsers);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [editForm, setEditForm] = useState({ name: '', email: '' });
+  const [isLoading, setIsLoading] = useState(initialUsers.length === 0);
+  const [error, setError] = useState(null);
+
+  const totalLearners = users.length;
+  const activeRate = totalLearners ? Math.round((users.filter(u => !u.isBanned).length / totalLearners) * 100) : 0;
+
+  useEffect(() => {
+    setUsers(initialUsers);
+    if (initialUsers.length > 0) {
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [initialUsers]);
+
+  useEffect(() => {
+    if (initialUsers.length > 0) return;
+
+    const fetchUsers = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('http://localhost:5000/api/admin/users');
+        if (!response.ok) throw new Error('Failed to load admin users');
+        const data = await response.json();
+        setUsers(data);
+        setError(null);
+      } catch (err) {
+        console.error('Admin users fetch error:', err);
+        setError('Unable to load users from the backend.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUsers();
+  }, [initialUsers.length]);
+
+  const getAvatarColor = (name) => {
+    const colors = ['#76D7A4', '#F1C40F', '#E74C3C', '#3498DB', '#9B59B6', '#5DADE2'];
+    return colors[name?.charCodeAt(0) % colors.length] || '#76D7A4';
+  };
 
   const filteredUsers = users.filter(user => 
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -87,11 +114,11 @@ const UsersPanel = () => {
       <div className={styles.statsSummary}>
         <div className={styles.statBox}>
           <span>Total Learners</span>
-          <h2>{users.length}</h2>
+          <h2>{totalLearners}</h2>
         </div>
         <div className={styles.statBox}>
           <span>Active Learners</span>
-          <h2>{Math.round((users.filter(u => !u.isBanned).length / users.length) * 100)}%</h2>
+          <h2>{activeRate}%</h2>
         </div>
       </div>
 

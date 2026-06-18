@@ -708,6 +708,54 @@ app.get('/api/progress/:userId', async (req, res) => {
   }
 });
 
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.username,
+         u.email,
+         u.photo,
+         COALESCE(SUM(up.tasks_completed), 0) AS tasks_completed,
+         COALESCE(SUM(up.total_tasks), 0) AS total_tasks,
+         CASE WHEN COALESCE(SUM(up.total_tasks), 0) > 0
+           THEN ROUND(SUM(up.tasks_completed)::numeric / SUM(up.total_tasks) * 100)
+           ELSE 0 END AS progress,
+         COALESCE(COUNT(DISTINCT up.concept), 0) AS concepts_count,
+         COALESCE(MAX(dp.progress_date)::text, '') AS last_active
+       FROM users u
+       LEFT JOIN user_profiles up ON up.user_id = u.id
+       LEFT JOIN daily_progress dp ON dp.user_id = u.id
+       GROUP BY u.id
+       ORDER BY u.name ASC`
+    );
+
+    const users = rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      username: row.username,
+      email: row.email,
+      photo: row.photo || null,
+      progress: Number(row.progress),
+      completedLessons: Number(row.tasks_completed),
+      certificates: Number(row.concepts_count),
+      lastActive: row.last_active || 'Unknown',
+      isBanned: false,
+      scores: {
+        python: 0,
+        javascript: 0,
+        java: 0
+      }
+    }));
+
+    res.json(users);
+  } catch (err) {
+    console.error('❌ GET ADMIN USERS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ══════════════════════════════════════
    API — GET DAILY PROGRESS
 ══════════════════════════════════════ */

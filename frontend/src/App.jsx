@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import LanguageCards from './components/Cards/LanguageCards'; 
 import ConceptModal from './components/Cards/ConceptModal';
 import CodeEditor from './components/CodeEditors/CodeEditor';
@@ -19,8 +20,17 @@ const EMPTY_USER = {
 };
 
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [isDarkMode, setIsDarkMode]   = useState(false);
-  const [currentPage, setCurrentPage] = useState('landing');
+
+  // Determine current page from URL
+  const currentPage = location.pathname === '/' ? 'landing'
+    : location.pathname === '/signup' ? 'signup'
+    : location.pathname === '/login' ? 'login'
+    : location.pathname.startsWith('/admin') ? 'admin'
+    : location.pathname === '/profile' ? 'profile'
+    : 'languages';
 
   const [selectedLang, setSelectedLang]       = useState(null);
   const [selectedLevel, setSelectedLevel]     = useState(null);
@@ -95,12 +105,12 @@ function App() {
     goToLanding();
   };
 
-  const goToAdmin     = () => setCurrentPage('admin');
-  const goToLanding   = () => setCurrentPage('landing');
-  const goToSignUp    = () => setCurrentPage('signup');
-  const goToLogin     = () => setCurrentPage('login');
-  const goToLanguages = () => setCurrentPage('languages');
-  const goToProfile   = () => setCurrentPage('profile');
+  const goToAdmin     = () => navigate('/admin');
+  const goToLanding   = () => navigate('/');
+  const goToSignUp    = () => navigate('/signup');
+  const goToLogin     = () => navigate('/login');
+  const goToLanguages = () => navigate('/languages');
+  const goToProfile   = () => navigate('/profile');
 
   // Fetch progress from server and store it — called after login/signup
   const fetchAndSetProgress = async (userId) => {
