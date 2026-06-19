@@ -1,16 +1,143 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from './AdminSettings.module.css';
-import { FaGear, FaFloppyDisk, FaArrowRotateLeft, FaChevronRight } from "react-icons/fa6";
+import { FaGear, FaFloppyDisk, FaArrowRotateLeft, FaChevronRight, FaShield, FaUser, FaEnvelope } from "react-icons/fa6";
 
-const AdminSettings = () => {
+const AdminSettings = ({ userData = {} }) => {
+  const [form, setForm] = useState({
+    name: userData?.name || '',
+    username: userData?.username || '',
+    email: userData?.email || ''
+  });
+  const [showToast, setShowToast] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const fetchAdminProfile = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/admin/profile');
+        const data = await res.json();
+        if (data.admin) {
+          setForm(data.admin);
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin profile:', err);
+      }
+    };
+    fetchAdminProfile();
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/admin/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        console.error('Save failed:', data.error);
+      }
+    } catch (err) {
+      console.error('Error saving admin profile:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Settings</h1>
+      {showToast && <div className={styles.toast}>✔ Saved successfully!</div>}
+
+      {/* Admin Profile Card */}
+      <div className={styles.profileCard}>
+        <div className={styles.profileCardHeader}>
+          <div className={styles.profileHeaderLeft}>
+            <div className={styles.avatarLarge}>
+              <FaShield className={styles.shieldIcon} />
+            </div>
+            <div className={styles.profileHeaderInfo}>
+              <h1 className={styles.adminTitle}>Administrator</h1>
+              <p className={styles.adminSubtitle}>System Administrator</p>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className={styles.profileForm}>
+          <div className={styles.formSection}>
+            <h2 className={styles.sectionTitle}>Account Information</h2>
+            
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  <FaUser className={styles.fieldIcon} />
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  className={styles.formInput}
+                  placeholder="Enter full name"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  <FaUser className={styles.fieldIcon} />
+                  Username
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={form.username}
+                  onChange={handleChange}
+                  className={styles.formInput}
+                  placeholder="Enter username"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>
+                  <FaEnvelope className={styles.fieldIcon} />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  className={styles.formInput}
+                  placeholder="Enter email address"
+                />
+              </div>
+            </div>
+
+            <div className={styles.formActions}>
+              <button type="submit" className={styles.primaryBtn} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button type="button" className={styles.secondaryBtn} disabled={isSaving}>Cancel</button>
+            </div>
+          </div>
+        </form>
+      </div>
 
       {/* System Control Section */}
       <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <FaGear className={styles.headerIcon} /> System Control
+          <FaGear className={styles.headerIcon} /> 
+          <span>System Control</span>
         </div>
         
         <div className={styles.settingItem}>
@@ -50,7 +177,8 @@ const AdminSettings = () => {
       {/* Data & Research Controls Section */}
       <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <FaFloppyDisk className={styles.headerIcon} /> Data & Research Controls
+          <FaFloppyDisk className={styles.headerIcon} /> 
+          <span>Data & Research Controls</span>
         </div>
         <div className={styles.actionGrid}>
           <div className={styles.actionButton}>

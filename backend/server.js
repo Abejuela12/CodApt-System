@@ -844,6 +844,64 @@ app.get('/api/test', async (req, res) => {
 });
 
 /* ══════════════════════════════════════
+   ADMIN PROFILE — SAVE
+   PUT /api/admin/profile
+══════════════════════════════════════ */
+app.put('/api/admin/profile', async (req, res) => {
+  try {
+    const { name, username, email } = req.body;
+    
+    if (!name || !username || !email) {
+      return res.status(400).json({ error: 'Name, username, and email are required.' });
+    }
+
+    // For this simple admin profile, we'll store in a settings table
+    // First, check if admin profile exists
+    const { rows: existing } = await db.query(
+      'SELECT * FROM admin_settings WHERE admin_id = 1'
+    );
+
+    if (existing.length > 0) {
+      // Update existing
+      const { rows } = await db.query(
+        'UPDATE admin_settings SET name = $1, username = $2, email = $3, updated_at = NOW() WHERE admin_id = 1 RETURNING *',
+        [name, username, email]
+      );
+      res.json({ success: true, admin: rows[0] });
+    } else {
+      // Create new
+      const { rows } = await db.query(
+        'INSERT INTO admin_settings (admin_id, name, username, email, created_at, updated_at) VALUES (1, $1, $2, $3, NOW(), NOW()) RETURNING *',
+        [name, username, email]
+      );
+      res.json({ success: true, admin: rows[0] });
+    }
+  } catch (err) {
+    console.error('❌ SAVE ADMIN PROFILE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ══════════════════════════════════════
+   ADMIN PROFILE — GET
+   GET /api/admin/profile
+══════════════════════════════════════ */
+app.get('/api/admin/profile', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT * FROM admin_settings WHERE admin_id = 1'
+    );
+    if (rows.length === 0) {
+      return res.json({ admin: { name: 'Admin', username: 'admin', email: '' } });
+    }
+    res.json({ admin: rows[0] });
+  } catch (err) {
+    console.error('❌ GET ADMIN PROFILE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ══════════════════════════════════════
    START SERVER
 ══════════════════════════════════════ */
 const PORT = process.env.PORT || 5000;

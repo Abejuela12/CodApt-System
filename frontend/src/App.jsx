@@ -105,12 +105,13 @@ function App() {
     goToLanding();
   };
 
-  const goToAdmin     = () => navigate('/admin');
-  const goToLanding   = () => navigate('/');
-  const goToSignUp    = () => navigate('/signup');
-  const goToLogin     = () => navigate('/login');
-  const goToLanguages = () => navigate('/languages');
-  const goToProfile   = () => navigate('/profile');
+  const goToAdmin         = () => navigate('/admin');
+  const goToLanding       = () => navigate('/');
+  const goToSignUp        = () => navigate('/signup');
+  const goToLogin         = () => navigate('/login');
+  const goToLanguages     = () => navigate('/languages');
+  const goToProfile       = () => navigate('/profile');
+  const goToAdminSettings = () => navigate('/admin/settings');
 
   // Fetch progress from server and store it — called after login/signup
   const fetchAndSetProgress = async (userId) => {
@@ -148,7 +149,12 @@ function App() {
       onLogin={handleLogin} onSignUp={goToSignUp} onHome={goToLanding} />
   );
   if (currentPage === 'admin') return (
-    <AdminDashboard isDarkMode={isDarkMode} toggleTheme={toggleTheme} />
+    <AdminDashboard
+      isDarkMode={isDarkMode}
+      toggleTheme={toggleTheme}
+      userData={userData}
+      onProfileClick={goToAdminSettings}
+    />
   );
   if (currentPage === 'profile') return (
     <ProfilePage userData={userData} onSave={handleSaveProfile}

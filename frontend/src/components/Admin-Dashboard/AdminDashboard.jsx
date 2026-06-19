@@ -6,7 +6,7 @@ import AdminReports from '../Admin-Reports/AdminReports';
 import AdminSettings from '../Admin-Settings/AdminSettings';
 import AdminCourses from '../Admin-Courses/AdminCourses';
 
-const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
+const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [users, setUsers] = useState([]);
@@ -100,19 +100,16 @@ const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
       </aside>
 
       <main className={styles.mainWrapper}>
-        {/* Top Header with Breadcrumb */}
-        <header className={styles.topHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: '500', color: '#666' }}>
-            <span>Admin</span>
-            <span>/</span>
-            <span>{currentView === 'dashboard' ? 'Dashboard' : currentView === 'users' ? 'Users' : currentView === 'reports' ? 'Reports' : currentView === 'content' ? 'Content' : 'Settings'}</span>
-          </div>
-          <div className={styles.headerRight}>
-            <span className={styles.adminBadge}>Admin</span>
-            <span className={styles.iconBtn} onClick={toggleTheme}>
+        {/* Top Header */}
+        <header className={`${styles.topHeader} ${styles.navbar}`}>
+          <div className={styles.navActions}>
+            <div className={styles.nameBadge}>{userData?.username || 'Admin'}</div>
+            <button className={styles.themeToggle} onClick={toggleTheme} type="button">
               {isDarkMode ? '☀️' : '🌙'}
-            </span>
-            <div className={styles.profileCircle}>👤</div>
+            </button>
+            <div className={styles.profileWrapper} onClick={onProfileClick}>
+              <div className={styles.profileIcon}>👤</div>
+            </div>
           </div>
         </header>
 
@@ -190,7 +187,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme }) => {
           {currentView === 'users' && <UsersPanel users={users} />}
           {currentView === 'reports' && <AdminReports />}
           {currentView === 'content' && <AdminCourses />}
-          {currentView === 'settings' && <AdminSettings />}
+          {currentView === 'settings' && <AdminSettings userData={userData} />}
         </div>
       </main>
     </div>
