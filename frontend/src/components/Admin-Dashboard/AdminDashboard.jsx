@@ -6,10 +6,12 @@ import AdminReports from '../Admin-Reports/AdminReports';
 import AdminSettings from '../Admin-Settings/AdminSettings';
 import AdminCourses from '../Admin-Courses/AdminCourses';
 
-const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) => {
+const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onLogout }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [users, setUsers] = useState([]);
+  const [avgScore, setAvgScore] = useState(0);
+  const [avgProgress, setAvgProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -32,12 +34,31 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) =
         console.error('Admin fetch error:', err);
         setError('Unable to load admin users from the backend.');
         setUsers([]);
+      }
+    };
+
+    const fetchDashboardMetrics = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/admin/reports');
+        if (!response.ok) throw new Error('Failed to load dashboard metrics');
+        const data = await response.json();
+        setAvgScore(data.avgScore || 0);
+        setAvgProgress(data.avgProgress || 0);
+      } catch (err) {
+        console.error('Admin metrics fetch error:', err);
+      }
+    };
+
+    const loadDashboardData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([fetchAdminUsers(), fetchDashboardMetrics()]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchAdminUsers();
+    loadDashboardData();
   }, []);
 
   const handleNavClick = (view) => {
@@ -53,7 +74,6 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) =
   };
 
   const totalLearners = users.length;
-  const avgScore = totalLearners ? Math.round(users.reduce((sum, user) => sum + (user.progress || 0), 0) / totalLearners) : 0;
   const activeRate = totalLearners ? Math.round((users.filter(user => !user.isBanned).length / totalLearners) * 100) : 0;
 
   const dashboardUsers = users.slice(0, 4);
@@ -136,7 +156,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) =
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>✅</span>
                         <p>Average Progress</p>
-                        <h3>{isLoading ? '…' : `${activeRate}%`}</h3>
+                        <h3>{isLoading ? '…' : `${avgProgress}%`}</h3>
                     </div>
                 </div>
               </div>
@@ -187,7 +207,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick }) =
           {currentView === 'users' && <UsersPanel users={users} />}
           {currentView === 'reports' && <AdminReports />}
           {currentView === 'content' && <AdminCourses />}
-          {currentView === 'settings' && <AdminSettings userData={userData} />}
+          {currentView === 'settings' && <AdminSettings userData={userData} onLogout={onLogout} />}
         </div>
       </main>
     </div>

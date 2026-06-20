@@ -1,4 +1,6 @@
 .container {
+    display: flex;
+    flex-direction: column;
     padding: 30px 20px 40px 20px;
     background: linear-gradient(135deg, #87CEFA 0%, #89D8E8 100%);
     min-height: 100vh;
@@ -316,6 +318,36 @@ input:checked + .slider:before {
     cursor: pointer;
     border-right: 1px solid #e5e7eb;
     transition: all 0.2s ease;
+}
+
+.logoutSection {
+    margin-top: 32px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.logoutBtn {
+    width: 100%;
+    max-width: 220px;
+    background: #ef4444;
+    color: white;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.logoutBtn:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.logoutBtn:focus {
+    outline: 2px solid rgba(239, 68, 68, 0.4);
+    outline-offset: 2px;
 }
 
 .actionButton:last-child {

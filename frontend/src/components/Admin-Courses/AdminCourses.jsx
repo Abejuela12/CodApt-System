@@ -1,50 +1,128 @@
- import React, { useState } from 'react';
+ import React, { useState, useEffect } from 'react';
 import styles from './AdminCourses.module.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
+const languageIconMap = {
+  Python: '🐍',
+  JavaScript: '📜',
+  Java: '☕',
+};
+
+const languageColorMap = {
+  Python: '#3776AB',
+  JavaScript: '#F7DF1E',
+  Java: '#007396',
+};
+
+const difficulties = ['Easy', 'Medium', 'Hard'];
+const tiers = ['Beginner', 'Intermediate', 'Advanced'];
+
 const AdminCourses = () => {
-  const [courses, setCourses] = useState([
-    { id: 1, title: "Python Basics", language: "Python", lessons: 12, status: "Active", enrolled: 450 },
-    { id: 2, title: "JavaScript Fundamentals", language: "JavaScript", lessons: 15, status: "Active", enrolled: 380 },
-    { id: 3, title: "Java OOP", language: "Java", lessons: 10, status: "Active", enrolled: 220 },
-    { id: 4, title: "Python Advanced", language: "Python", lessons: 8, status: "Draft", enrolled: 0 },
-    { id: 5, title: "React.js Basics", language: "JavaScript", lessons: 18, status: "Active", enrolled: 290 },
-    { id: 6, title: "Data Structures", language: "Python", lessons: 20, status: "Active", enrolled: 180 },
-    { id: 7, title: "Java Spring Boot", language: "Java", lessons: 14, status: "Active", enrolled: 150 },
-    { id: 8, title: "Node.js Backend", language: "JavaScript", lessons: 12, status: "Active", enrolled: 200 },
-    { id: 9, title: "Machine Learning Intro", language: "Python", lessons: 16, status: "Draft", enrolled: 0 },
-    { id: 10, title: "Android Development", language: "Java", lessons: 22, status: "Active", enrolled: 95 },
-    { id: 11, title: "Python GUI Programming", language: "Python", lessons: 10, status: "Active", enrolled: 75 },
-    { id: 12, title: "ES6 JavaScript", language: "JavaScript", lessons: 8, status: "Active", enrolled: 120 },
-  ]);
-
-  const [languages, setLanguages] = useState([
-    { id: 1, name: "Python", icon: "🐍", color: "#3776AB", courses: 4, students: 725 },
-    { id: 2, name: "JavaScript", icon: "📜", color: "#F7DF1E", courses: 4, students: 990 },
-    { id: 3, name: "Java", icon: "☕", color: "#007396", courses: 4, students: 545 },
-  ]);
-
-  const [activeTab, setActiveTab] = useState('courses');
-  const [showAddCourse, setShowAddCourse] = useState(false);
+  const [problems, setProblems] = useState([]);
+  const [languages, setLanguages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  const [activeTab, setActiveTab] = useState('problems');
+  const [showAddProblem, setShowAddProblem] = useState(false);
   const [showAddLanguage, setShowAddLanguage] = useState(false);
-  const [newCourse, setNewCourse] = useState({ title: '', language: 'Python', lessons: 0 });
+  const [newProblem, setNewProblem] = useState({
+    title: '',
+    language: 'Python',
+    concept: '',
+    difficulty: 'Easy',
+    problem_tier: 'Beginner',
+    instruction: '',
+    expected_output: ''
+  });
   const [newLanguage, setNewLanguage] = useState({ name: '', icon: '' });
 
-  const addCourse = () => {
-    if (newCourse.title) {
-      const course = {
-        id: courses.length + 1,
-        ...newCourse,
-        status: "Active",
-        enrolled: 0
-      };
-      setCourses([...courses, course]);
-      setNewCourse({ title: '', language: 'Python', lessons: 0 });
-      setShowAddCourse(false);
+  const fetchProblems = async () => {
+    const res = await fetch(`${API_BASE_URL}/api/admin/problems`);
+    if (!res.ok) throw new Error('Failed to load problems');
+    return res.json();
+  };
+
+  const fetchLanguages = async () => {
+    const res = await fetch(`${API_BASE_URL}/api/admin/content`);
+    if (!res.ok) throw new Error('Failed to load languages');
+    const data = await res.json();
+    return data.languages || [];
+  };
+
+  useEffect(() => {
+    const loadContent = async () => {
+      setIsLoading(true);
+      setFetchError('');
+      try {
+        const [problemsData, languagesData] = await Promise.all([
+          fetchProblems(),
+          fetchLanguages()
+        ]);
+        setProblems(problemsData);
+        setLanguages(languagesData);
+      } catch (err) {
+        console.error('Failed to load admin content:', err);
+        setFetchError('Could not load content data from the server.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadContent();
+  }, []);
+
+  const addProblem = async () => {
+    if (!newProblem.title || !newProblem.concept) {
+      setFetchError('Problem title and concept are required.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/problems`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProblem)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create problem');
+      }
+
+      const createdProblem = await res.json();
+      setProblems([createdProblem, ...problems]);
+      setNewProblem({
+        title: '',
+        language: 'Python',
+        concept: '',
+        difficulty: 'Easy',
+        problem_tier: 'Beginner',
+        instruction: '',
+        expected_output: ''
+      });
+      setShowAddProblem(false);
+      setFetchError('');
+    } catch (err) {
+      console.error('Failed to add problem:', err);
+      setFetchError(err.message || 'Could not add problem.');
     }
   };
 
-  const deleteCourse = (id) => {
-    setCourses(courses.filter(course => course.id !== id));
+  const deleteProblem = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/problems/${id}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to delete problem');
+      }
+      setProblems(problems.filter(problem => problem.id !== id));
+      setFetchError('');
+    } catch (err) {
+      console.error('Failed to delete problem:', err);
+      setFetchError(err.message || 'Could not delete problem.');
+    }
   };
 
   const addLanguage = () => {
@@ -52,19 +130,23 @@ const AdminCourses = () => {
       const language = {
         id: languages.length + 1,
         ...newLanguage,
-        color: "#2D58A6",
+        color: '#2D58A6',
         courses: 0,
-        students: 0
+        students: 0,
       };
       setLanguages([...languages, language]);
       setNewLanguage({ name: '', icon: '' });
       setShowAddLanguage(false);
+      setFetchError('');
     }
   };
 
   const deleteLanguage = (id) => {
     setLanguages(languages.filter(lang => lang.id !== id));
   };
+
+  const uniqueConceptCount = new Set(problems.map(problem => problem.concept)).size;
+  const beginnerCount = problems.filter(problem => problem.problem_tier === 'Beginner').length;
 
   return (
     <div className={styles.coursesPanelWrapper}>
@@ -74,8 +156,8 @@ const AdminCourses = () => {
         <div className={styles.statCard}>
           <span className={styles.statEmoji}>📚</span>
           <div className={styles.statInfo}>
-            <h3>{courses.length}</h3>
-            <p>Total Courses</p>
+            <h3>{problems.length}</h3>
+            <p>Total Problems</p>
           </div>
         </div>
         <div className={styles.statCard}>
@@ -86,29 +168,31 @@ const AdminCourses = () => {
           </div>
         </div>
         <div className={styles.statCard}>
-          <span className={styles.statEmoji}>👨‍🎓</span>
+          <span className={styles.statEmoji}>🧠</span>
           <div className={styles.statInfo}>
-            <h3>{courses.reduce((acc, c) => acc + c.enrolled, 0)}</h3>
-            <p>Total Enrolled</p>
+            <h3>{uniqueConceptCount}</h3>
+            <p>Unique Concepts</p>
           </div>
         </div>
         <div className={styles.statCard}>
           <span className={styles.statEmoji}>✅</span>
           <div className={styles.statInfo}>
-            <h3>{courses.filter(c => c.status === 'Active').length}</h3>
-            <p>Active Courses</p>
+            <h3>{beginnerCount}</h3>
+            <p>Beginner Problems</p>
           </div>
         </div>
       </div>
+      {fetchError && <div className={styles.errorMessage}>{fetchError}</div>}
+      {isLoading && <div className={styles.loading}>Loading admin content...</div>}
 
       <div className={styles.tabContainer}>
-        <button 
-          className={`${styles.tabBtn} ${activeTab === 'courses' ? styles.activeTab : ''}`}
-          onClick={() => setActiveTab('courses')}
+        <button
+          className={`${styles.tabBtn} ${activeTab === 'problems' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('problems')}
         >
-          📚 Courses / Lessons
+          🧩 Problems
         </button>
-        <button 
+        <button
           className={`${styles.tabBtn} ${activeTab === 'languages' ? styles.activeTab : ''}`}
           onClick={() => setActiveTab('languages')}
         >
@@ -116,42 +200,73 @@ const AdminCourses = () => {
         </button>
       </div>
 
-      {activeTab === 'courses' && (
+      {activeTab === 'problems' && (
         <div className={styles.contentSection}>
           <div className={styles.sectionHeader}>
-            <h2>Courses & Lessons</h2>
-            <button className={styles.addBtn} onClick={() => setShowAddCourse(true)}>
-              + Add Course
+            <h2>Problems</h2>
+            <button className={styles.addBtn} onClick={() => setShowAddProblem(true)}>
+              + Add Problem
             </button>
           </div>
 
-          {showAddCourse && (
+          {showAddProblem && (
             <div className={styles.addForm}>
               <input
                 type="text"
-                placeholder="Course Title"
+                placeholder="Problem Title"
                 className={styles.inputField}
-                value={newCourse.title}
-                onChange={(e) => setNewCourse({...newCourse, title: e.target.value})}
+                value={newProblem.title}
+                onChange={(e) => setNewProblem({ ...newProblem, title: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Concept"
+                className={styles.inputField}
+                value={newProblem.concept}
+                onChange={(e) => setNewProblem({ ...newProblem, concept: e.target.value })}
               />
               <select
                 className={styles.selectField}
-                value={newCourse.language}
-                onChange={(e) => setNewCourse({...newCourse, language: e.target.value})}
+                value={newProblem.language}
+                onChange={(e) => setNewProblem({ ...newProblem, language: e.target.value })}
               >
-                {languages.map(lang => (
+                {languages.map((lang) => (
                   <option key={lang.id} value={lang.name}>{lang.name}</option>
                 ))}
               </select>
-              <input
-                type="number"
-                placeholder="Number of Lessons"
-                className={styles.inputField}
-                value={newCourse.lessons}
-                onChange={(e) => setNewCourse({...newCourse, lessons: parseInt(e.target.value) || 0})}
+              <select
+                className={styles.selectField}
+                value={newProblem.difficulty}
+                onChange={(e) => setNewProblem({ ...newProblem, difficulty: e.target.value })}
+              >
+                {difficulties.map((level) => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
+              <select
+                className={styles.selectField}
+                value={newProblem.problem_tier}
+                onChange={(e) => setNewProblem({ ...newProblem, problem_tier: e.target.value })}
+              >
+                {tiers.map((tier) => (
+                  <option key={tier} value={tier}>{tier}</option>
+                ))}
+              </select>
+              <textarea
+                placeholder="Instruction"
+                className={styles.textareaField}
+                value={newProblem.instruction}
+                onChange={(e) => setNewProblem({ ...newProblem, instruction: e.target.value })}
               />
-              <button className={styles.saveBtn} onClick={addCourse}>Save</button>
-              <button className={styles.cancelBtn} onClick={() => setShowAddCourse(false)}>Cancel</button>
+              <input
+                type="text"
+                placeholder="Expected Output"
+                className={styles.inputField}
+                value={newProblem.expected_output}
+                onChange={(e) => setNewProblem({ ...newProblem, expected_output: e.target.value })}
+              />
+              <button className={styles.saveBtn} onClick={addProblem}>Save</button>
+              <button className={styles.cancelBtn} onClick={() => setShowAddProblem(false)}>Cancel</button>
             </div>
           )}
 
@@ -159,33 +274,30 @@ const AdminCourses = () => {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Course Title</th>
+                  <th>Problem Title</th>
                   <th>Language</th>
-                  <th>Lessons</th>
-                  <th>Enrolled</th>
-                  <th>Status</th>
+                  <th>Concept</th>
+                  <th>Difficulty</th>
+                  <th>Tier</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {courses.map(course => (
-                  <tr key={course.id}>
-                    <td>{course.title}</td>
+                {problems.map((problem) => (
+                  <tr key={problem.id}>
+                    <td>{problem.title}</td>
                     <td>
                       <span className={styles.languageBadge}>
-                        {course.language}
+                        {problem.language}
                       </span>
                     </td>
-                    <td>{course.lessons}</td>
-                    <td>{course.enrolled}</td>
+                    <td>{problem.concept}</td>
+                    <td>{problem.difficulty}</td>
+                    <td>{problem.problem_tier}</td>
                     <td>
-                      <span className={`${styles.statusBadge} ${course.status === 'Active' ? styles.activeStatus : styles.draftStatus}`}>
-                        {course.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button className={styles.editBtn}>Edit</button>
-                      <button className={styles.deleteBtn} onClick={() => deleteCourse(course.id)}>Delete</button>
+                      <button className={styles.deleteBtn} onClick={() => deleteProblem(problem.id)}>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -211,14 +323,14 @@ const AdminCourses = () => {
                 placeholder="Language Name"
                 className={styles.inputField}
                 value={newLanguage.name}
-                onChange={(e) => setNewLanguage({...newLanguage, name: e.target.value})}
+                onChange={(e) => setNewLanguage({ ...newLanguage, name: e.target.value })}
               />
               <input
                 type="text"
                 placeholder="Icon (emoji)"
                 className={styles.inputField}
                 value={newLanguage.icon}
-                onChange={(e) => setNewLanguage({...newLanguage, icon: e.target.value})}
+                onChange={(e) => setNewLanguage({ ...newLanguage, icon: e.target.value })}
               />
               <button className={styles.saveBtn} onClick={addLanguage}>Save</button>
               <button className={styles.cancelBtn} onClick={() => setShowAddLanguage(false)}>Cancel</button>
@@ -226,7 +338,7 @@ const AdminCourses = () => {
           )}
 
           <div className={styles.languagesGrid}>
-            {languages.map(lang => (
+            {languages.map((lang) => (
               <div key={lang.id} className={styles.languageCard}>
                 <div className={styles.languageIcon} style={{ backgroundColor: lang.color }}>
                   {lang.icon}

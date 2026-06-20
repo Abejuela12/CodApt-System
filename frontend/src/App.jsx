@@ -154,6 +154,7 @@ function App() {
       toggleTheme={toggleTheme}
       userData={userData}
       onProfileClick={goToAdminSettings}
+      onLogout={handleLogout}
     />
   );
   if (currentPage === 'profile') return (

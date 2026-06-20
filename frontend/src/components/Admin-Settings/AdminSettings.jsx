@@ -2,8 +2,13 @@ import React, { useState, useEffect } from 'react';
 import styles from './AdminSettings.module.css';
 import { FaGear, FaFloppyDisk, FaArrowRotateLeft, FaChevronRight, FaShield, FaUser, FaEnvelope } from "react-icons/fa6";
 
-const AdminSettings = ({ userData = {} }) => {
+const AdminSettings = ({ userData = {}, onLogout }) => {
   const [form, setForm] = useState({
+    name: userData?.name || '',
+    username: userData?.username || '',
+    email: userData?.email || ''
+  });
+  const [initialForm, setInitialForm] = useState({
     name: userData?.name || '',
     username: userData?.username || '',
     email: userData?.email || ''
@@ -17,7 +22,13 @@ const AdminSettings = ({ userData = {} }) => {
         const res = await fetch('http://localhost:5000/api/admin/profile');
         const data = await res.json();
         if (data.admin) {
-          setForm(data.admin);
+          const adminData = {
+            name: data.admin.name || '',
+            username: data.admin.username || '',
+            email: data.admin.email || ''
+          };
+          setForm(adminData);
+          setInitialForm(adminData);
         }
       } catch (err) {
         console.error('Failed to fetch admin profile:', err);
@@ -42,6 +53,13 @@ const AdminSettings = ({ userData = {} }) => {
       });
       const data = await res.json();
       if (data.success) {
+        const savedData = {
+          name: data.admin.name || '',
+          username: data.admin.username || '',
+          email: data.admin.email || ''
+        };
+        setForm(savedData);
+        setInitialForm(savedData);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000);
       } else {
@@ -52,6 +70,10 @@ const AdminSettings = ({ userData = {} }) => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    setForm(initialForm);
   };
 
   return (
@@ -127,7 +149,7 @@ const AdminSettings = ({ userData = {} }) => {
               <button type="submit" className={styles.primaryBtn} disabled={isSaving}>
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
-              <button type="button" className={styles.secondaryBtn} disabled={isSaving}>Cancel</button>
+              <button type="button" className={styles.secondaryBtn} disabled={isSaving} onClick={handleCancel}>Cancel</button>
             </div>
           </div>
         </form>
@@ -196,6 +218,16 @@ const AdminSettings = ({ userData = {} }) => {
             <FaChevronRight className={styles.chevron} />
           </div>
         </div>
+      </div>
+
+      <div className={styles.logoutSection}>
+        <button
+          type="button"
+          className={styles.logoutBtn}
+          onClick={onLogout}
+        >
+          Log Out
+        </button>
       </div>
     </div>
   );

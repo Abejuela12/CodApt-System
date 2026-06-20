@@ -756,6 +756,372 @@ app.get('/api/admin/users', async (req, res) => {
   }
 });
 
+app.get('/api/admin/content', async (req, res) => {
+  try {
+    const { rows: courseRows } = await db.query(
+      `SELECT p.language,
+              p.concept,
+              COUNT(*) AS lessons,
+              COUNT(DISTINCT up.user_id) AS enrolled
+       FROM problems p
+       LEFT JOIN user_profiles up
+         ON up.language = p.language AND up.concept = p.concept
+       GROUP BY p.language, p.concept
+       ORDER BY lessons DESC, p.language ASC, p.concept ASC`
+    );
+
+    const courses = courseRows.map(row => ({
+      id: `${row.language}-${row.concept}`,
+      title: row.concept,
+      language: row.language,
+      lessons: Number(row.lessons),
+      status: Number(row.enrolled) > 0 ? 'Active' : 'Draft',
+      enrolled: Number(row.enrolled),
+    }));
+
+    const { rows: languageRows } = await db.query(
+      `SELECT p.language,
+              COUNT(DISTINCT p.concept) AS courses,
+              COUNT(DISTINCT up.user_id) AS students
+       FROM problems p
+       LEFT JOIN user_profiles up
+         ON up.language = p.language
+       GROUP BY p.language
+       ORDER BY p.language ASC`
+    );
+
+    const languages = languageRows.map(row => ({
+      id: row.language,
+      name: row.language,
+      icon: row.language === 'Python' ? '🐍'
+        : row.language === 'JavaScript' ? '📜'
+        : row.language === 'Java' ? '☕'
+        : '💻',
+      color: row.language === 'Python' ? '#3776AB'
+        : row.language === 'JavaScript' ? '#F7DF1E'
+        : row.language === 'Java' ? '#007396'
+        : '#5A67D8',
+      courses: Number(row.courses),
+      students: Number(row.students),
+    }));
+
+    res.json({ courses, languages });
+  } catch (err) {
+    console.error('❌ GET ADMIN CONTENT:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/problems', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at
+       FROM problems
+       ORDER BY created_at DESC`
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error('❌ GET ADMIN PROBLEMS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/problems', async (req, res) => {
+  try {
+    const {
+      title,
+      language,
+      concept,
+      difficulty,
+      problem_tier,
+      instruction,
+      expected_output
+    } = req.body;
+
+    if (!title || !language || !concept || !difficulty || !problem_tier) {
+      return res.status(400).json({ error: 'Missing required problem fields.' });
+    }
+
+    const { rows } = await db.query(
+      `INSERT INTO problems
+       (title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at`,
+      [
+        title,
+        language,
+        concept,
+        difficulty,
+        problem_tier,
+        instruction || '',
+        expected_output || ''
+      ]
+    );
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('❌ CREATE ADMIN PROBLEM:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/problems/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rowCount } = await db.query(
+      `DELETE FROM problems WHERE id = $1`,
+      [id]
+    );
+
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Problem not found.' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ DELETE ADMIN PROBLEM:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const buildReportsUserSubquery = (timeframe, userType) => {
+  const clauses = [];
+
+  if (timeframe === '6m') {
+    clauses.push(`EXISTS (SELECT 1 FROM daily_progress dp WHERE dp.user_id = u.id AND dp.progress_date >= CURRENT_DATE - INTERVAL '6 months')`);
+  } else if (timeframe === '3m') {
+    clauses.push(`EXISTS (SELECT 1 FROM daily_progress dp WHERE dp.user_id = u.id AND dp.progress_date >= CURRENT_DATE - INTERVAL '3 months')`);
+  } else if (timeframe === '30d') {
+    clauses.push(`EXISTS (SELECT 1 FROM daily_progress dp WHERE dp.user_id = u.id AND dp.progress_date >= CURRENT_DATE - INTERVAL '30 days')`);
+  }
+
+  if (userType === 'active') {
+    clauses.push(`EXISTS (SELECT 1 FROM daily_progress dp WHERE dp.user_id = u.id AND dp.progress_date >= CURRENT_DATE - INTERVAL '30 days')`);
+  }
+
+  if (userType === 'new') {
+    clauses.push(`u.created_at >= CURRENT_DATE - INTERVAL '30 days'`);
+  }
+
+  if (clauses.length === 0) {
+    return null;
+  }
+
+  return `SELECT u.id FROM users u WHERE ${clauses.join(' AND ')}`;
+};
+
+const buildProfileWhereClause = (timeframe, userType) => {
+  const clauses = [];
+  const userSubquery = buildReportsUserSubquery(timeframe, userType);
+
+  if (userSubquery) {
+    clauses.push(`up.user_id IN (${userSubquery})`);
+  }
+
+  if (timeframe === '6m') {
+    clauses.push(`up.last_updated >= CURRENT_DATE - INTERVAL '6 months'`);
+  } else if (timeframe === '3m') {
+    clauses.push(`up.last_updated >= CURRENT_DATE - INTERVAL '3 months'`);
+  } else if (timeframe === '30d') {
+    clauses.push(`up.last_updated >= CURRENT_DATE - INTERVAL '30 days'`);
+  }
+
+  return clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+};
+
+const buildPerformanceWhere = (timeframe, userType) => {
+  const clauses = [];
+
+  if (timeframe === '6m') {
+    clauses.push(`dp.progress_date >= CURRENT_DATE - INTERVAL '6 months'`);
+  } else if (timeframe === '3m') {
+    clauses.push(`dp.progress_date >= CURRENT_DATE - INTERVAL '3 months'`);
+  } else if (timeframe === '30d') {
+    clauses.push(`dp.progress_date >= CURRENT_DATE - INTERVAL '30 days'`);
+  }
+
+  if (userType === 'active') {
+    clauses.push(`dp.progress_date >= CURRENT_DATE - INTERVAL '30 days'`);
+  }
+
+  if (userType === 'new') {
+    clauses.push(`dp.user_id IN (SELECT id FROM users WHERE created_at >= CURRENT_DATE - INTERVAL '30 days')`);
+  }
+
+  return clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+};
+
+app.get('/api/admin/reports', async (req, res) => {
+  try {
+    const selectedTimeframe = req.query.timeframe || 'all';
+    const selectedUser = req.query.user || 'all';
+    const profileWhere = buildProfileWhereClause(selectedTimeframe, selectedUser);
+    const topicWhere = profileWhere.replace(/up\./g, '');
+    const errorWhere = profileWhere.replace(/up\./g, '');
+    const performanceWhere = buildPerformanceWhere(selectedTimeframe, selectedUser);
+
+    const { rows: metricsRows } = await db.query(
+      `SELECT
+         COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
+         COALESCE(ROUND(SUM(tasks_completed)::decimal / NULLIF(SUM(total_tasks), 0) * 100), 0) AS avg_progress
+       FROM user_profiles up
+       ${profileWhere}`
+    );
+
+    const { rows: performanceRows } = await db.query(
+      `WITH months AS (
+         SELECT generate_series(
+           date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+           date_trunc('month', CURRENT_DATE),
+           INTERVAL '1 month'
+         ) AS month
+       ), progress_by_month AS (
+         SELECT date_trunc('month', progress_date) AS month,
+                ROUND(AVG(score)) AS score,
+                ROUND(AVG(score) * 0.95) AS success
+         FROM daily_progress dp
+         ${performanceWhere}
+         GROUP BY 1
+       )
+       SELECT to_char(m.month, 'Mon ''YY') AS name,
+              COALESCE(pb.score, 0) AS score,
+              COALESCE(pb.success, 0) AS success
+       FROM months m
+       LEFT JOIN progress_by_month pb ON pb.month = m.month
+       ORDER BY m.month ASC`
+    );
+
+    const { rows: topicRows } = await db.query(
+      `SELECT concept AS name,
+              COUNT(*) AS count
+       FROM user_profiles up
+       ${topicWhere}
+       GROUP BY concept
+       ORDER BY count DESC
+       LIMIT 6`
+    );
+
+    const { rows: errorRows } = await db.query(
+      `SELECT
+         COALESCE(SUM(syntax_errors), 0) AS syntax_errors,
+         COALESCE(SUM(structural_errors), 0) AS structural_errors
+       FROM user_profiles up
+       ${errorWhere}`
+    );
+
+    const metrics = metricsRows[0] || { avg_score: 0, avg_progress: 0 };
+    const errorTotals = errorRows[0] || { syntax_errors: 0, structural_errors: 0 };
+
+    const pieData = [
+      { name: 'Syntax Errors', value: Number(errorTotals.syntax_errors), color: '#EE6666' },
+      { name: 'Logic Errors', value: Number(errorTotals.structural_errors), color: '#FAC858' },
+      { name: 'Other Errors', value: 0, color: '#5470C6' }
+    ];
+
+    res.json({
+      avgScore: Number(metrics.avg_score),
+      avgProgress: Number(metrics.avg_progress),
+      performanceData: performanceRows.map(row => ({
+        name: row.name,
+        score: Number(row.score),
+        success: Number(row.success),
+      })),
+      topics: topicRows.map((row, index) => ({
+        name: row.name,
+        count: Number(row.count),
+        color: index % 2 === 0 ? '#76D7A4' : '#F1C40F'
+      })),
+      pieData,
+    });
+  } catch (err) {
+    console.error('❌ GET ADMIN REPORTS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ══════════════════════════════════════
+   API — DOWNLOAD ADMIN REPORTS AS CSV
+   GET /api/admin/reports/download
+══════════════════════════════════════ */
+app.get('/api/admin/reports/download', async (req, res) => {
+  try {
+    const selectedTimeframe = req.query.timeframe || 'all';
+    const selectedUser = req.query.user || 'all';
+    const profileWhere = buildProfileWhereClause(selectedTimeframe, selectedUser);
+    const topicWhere = profileWhere.replace(/up\./g, '');
+    const errorWhere = profileWhere.replace(/up\./g, '');
+    const performanceWhere = buildPerformanceWhere(selectedTimeframe, selectedUser);
+
+    const { rows: metricsRows } = await db.query(
+      `SELECT
+         COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
+         COALESCE(ROUND(SUM(tasks_completed)::decimal / NULLIF(SUM(total_tasks), 0) * 100), 0) AS avg_progress
+       FROM user_profiles up
+       ${profileWhere}`
+    );
+
+    const { rows: performanceRows } = await db.query(
+      `WITH months AS (
+         SELECT generate_series(
+           date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+           date_trunc('month', CURRENT_DATE),
+           INTERVAL '1 month'
+         ) AS month
+       ), progress_by_month AS (
+         SELECT date_trunc('month', progress_date) AS month,
+                ROUND(AVG(score)) AS score,
+                ROUND(AVG(score) * 0.95) AS success
+         FROM daily_progress dp
+         ${performanceWhere}
+         GROUP BY 1
+       )
+       SELECT to_char(m.month, 'Mon ''YY') AS name,
+              COALESCE(pb.score, 0) AS score,
+              COALESCE(pb.success, 0) AS success
+       FROM months m
+       LEFT JOIN progress_by_month pb ON pb.month = m.month
+       ORDER BY m.month ASC`
+    );
+
+    const { rows: topicRows } = await db.query(
+      `SELECT concept AS name,
+              COUNT(*) AS count
+       FROM user_profiles up
+       ${topicWhere}
+       GROUP BY concept
+       ORDER BY count DESC
+       LIMIT 6`
+    );
+
+    const metrics = metricsRows[0] || { avg_score: 0, avg_progress: 0 };
+
+    let csvContent = 'CodApt Admin Report\n';
+    csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+    csvContent += `Average Score,${metrics.avg_score}%\n`;
+    csvContent += `Average Progress,${metrics.avg_progress}%\n\n`;
+    
+    csvContent += 'Performance Data Over Time\n';
+    csvContent += 'Month,Score,Success Rate\n';
+    performanceRows.forEach(row => {
+      csvContent += `${row.name},${row.score},${row.success}\n`;
+    });
+
+    csvContent += '\nTop Programming Topics\n';
+    csvContent += 'Topic,Count\n';
+    topicRows.forEach(row => {
+      csvContent += `${row.name},${row.count}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Report_${new Date().getTime()}.csv"`);
+    res.send(csvContent);
+  } catch (err) {
+    console.error('❌ DOWNLOAD ADMIN REPORTS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ══════════════════════════════════════
    API — GET DAILY PROGRESS
 ══════════════════════════════════════ */

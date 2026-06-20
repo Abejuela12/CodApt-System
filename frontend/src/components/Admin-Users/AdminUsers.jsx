@@ -16,7 +16,11 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
   const activeRate = totalLearners ? Math.round((users.filter(u => !u.isBanned).length / totalLearners) * 100) : 0;
 
   useEffect(() => {
-    setUsers(initialUsers);
+    setUsers(initialUsers.map(user => ({
+      ...user,
+      progress: Number(user.progress) || 0,
+      color: user.color || getAvatarColor(user.name)
+    })));
     if (initialUsers.length > 0) {
       setIsLoading(false);
       setError(null);
@@ -32,7 +36,11 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
         const response = await fetch('http://localhost:5000/api/admin/users');
         if (!response.ok) throw new Error('Failed to load admin users');
         const data = await response.json();
-        setUsers(data);
+        setUsers(data.map(user => ({
+          ...user,
+          progress: Number(user.progress) || 0,
+          color: user.color || getAvatarColor(user.name)
+        })));
         setError(null);
       } catch (err) {
         console.error('Admin users fetch error:', err);
@@ -82,14 +90,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
   const confirmAction = () => {
     if (actionType === 'delete') {
       setUsers(users.filter(u => u.id !== selectedUser.id));
-    } else if (actionType === 'ban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: true } : u
-      ));
-    } else if (actionType === 'unban') {
-      setUsers(users.map(u => 
-        u.id === selectedUser.id ? { ...u, isBanned: false } : u
-      ));
     } else if (actionType === 'reset') {
       alert(`Password reset link sent to ${selectedUser.email}`);
     }
@@ -173,7 +173,7 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
               ) : (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                    No users found matching "{searchQuery}"
+                    {`No users found matching "${searchQuery}"`}
                   </td>
                 </tr>
               )}
@@ -259,15 +259,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
               <button className={styles.resetPasswordBtn} onClick={() => openActionModal(selectedUser, 'reset')}>
                 🔑 Reset Password
               </button>
-              {selectedUser.isBanned ? (
-                <button className={styles.unbanUserBtn} onClick={() => openActionModal(selectedUser, 'unban')}>
-                  ✅ Unban User
-                </button>
-              ) : (
-                <button className={styles.banUserBtn} onClick={() => openActionModal(selectedUser, 'ban')}>
-                  🚫 Ban User
-                </button>
-              )}
               <button className={styles.deleteUserBtn} onClick={() => openActionModal(selectedUser, 'delete')}>
                 🗑️ Delete User
               </button>
@@ -317,8 +308,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
             <div className={styles.modalHeader}>
               <h2>
                 {actionType === 'delete' && 'Delete User'}
-                {actionType === 'ban' && 'Ban User'}
-                {actionType === 'unban' && 'Unban User'}
                 {actionType === 'reset' && 'Reset Password'}
               </h2>
               <button className={styles.closeBtn} onClick={() => setShowActionModal(false)}>×</button>
@@ -326,8 +315,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
             <div className={styles.modalBody}>
               <p>
                 {actionType === 'delete' && `Are you sure you want to delete ${selectedUser.name}? This action cannot be undone.`}
-                {actionType === 'ban' && `Are you sure you want to ban ${selectedUser.name}? They will lose access to the platform.`}
-                {actionType === 'unban' && `Are you sure you want to unban ${selectedUser.name}? They will regain access to the platform.`}
                 {actionType === 'reset' && `A password reset link will be sent to ${selectedUser.email}.`}
               </p>
             </div>

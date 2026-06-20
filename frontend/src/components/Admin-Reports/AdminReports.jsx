@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell 
@@ -6,40 +6,99 @@ import {
 import styles from './AdminReports.module.css';
 
 const AdminReports = () => {
-  // Data for the Performance Graph
-  const performanceData = [
-    { name: "Jan '24", success: 15, score: 10 },
-    { name: "Feb '24", success: 18, score: 14 },
-    { name: "Mar '24", success: 20, score: 16 },
-    { name: "Apr '24", success: 21, score: 17 },
-    { name: "May '24", success: 22, score: 19 },
-  ];
+  const [performanceData, setPerformanceData] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [pieData, setPieData] = useState([]);
+  const [avgScore, setAvgScore] = useState(0);
+  const [avgProgress, setAvgProgress] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
+  const [selectedTimeframe, setSelectedTimeframe] = useState('all');
+  const [selectedUser, setSelectedUser] = useState('all');
 
-  const topics = [
-    { name: "Array & Strings", count: 845, color: "#76D7A4" },
-    { name: "Conditionals", count: 645, color: "#F1C40F" },
-    { name: "Loops", count: 552, color: "#76D7A4" },
-    { name: "Input Handling", count: 471, color: "#F1C40F" },
-    { name: "Functions", count: 442, color: "#76D7A4" },
-    { name: "Recursion", count: 298, color: "#F1C40F" },
-  ];
+  const fetchReports = async () => {
+    setIsLoading(true);
+    setFetchError('');
+    try {
+      const params = new URLSearchParams({ timeframe: selectedTimeframe, user: selectedUser });
+      const res = await fetch(`http://localhost:5000/api/admin/reports?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load admin reports');
+      const data = await res.json();
 
-  // Data for the Pie Chart
-  const pieData = [
-    { name: 'Syntax Errors', value: 43, color: '#EE6666' },
-    { name: 'Logic Errors', value: 25, color: '#FAC858' },
-    { name: 'Other Errors', value: 32, color: '#5470C6' },
-    { name: 'Semantic', value: 23, color: '#91CC75' },
-  ];
+      setAvgScore(data.avgScore || 0);
+      setAvgProgress(data.avgProgress || 0);
+      setPerformanceData(data.performanceData || []);
+      setTopics(data.topics || []);
+      setPieData(data.pieData || []);
+    } catch (err) {
+      console.error('Failed to fetch admin reports:', err);
+      setFetchError('Could not load report data from the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, [selectedTimeframe, selectedUser]);
+
+  const downloadReport = async () => {
+    try {
+      const params = new URLSearchParams({ timeframe: selectedTimeframe, user: selectedUser });
+      const res = await fetch(`http://localhost:5000/api/admin/reports/download?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to download report');
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `CodApt_Report_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download report:', err);
+      setFetchError('Could not download report. Please try again.');
+    }
+  };
+
+  const handleGenerateAndDownload = async () => {
+    await fetchReports();
+    await downloadReport();
+  };
 
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Reports</h1>
       
       <div className={styles.filterBar}>
-        <select className={styles.dropdown}><option>All Time</option></select>
-        <select className={styles.dropdown}><option>All Users</option></select>
-        <button className={styles.generateBtn}>Generate Report</button>
+        <select className={styles.dropdown}
+          value={selectedTimeframe}
+          onChange={(e) => setSelectedTimeframe(e.target.value)}
+        >
+          <option value="all">All Time</option>
+          <option value="6m">Last 6 Months</option>
+          <option value="3m">Last 3 Months</option>
+          <option value="30d">Last 30 Days</option>
+        </select>
+
+        <select className={styles.dropdown}
+          value={selectedUser}
+          onChange={(e) => setSelectedUser(e.target.value)}
+        >
+          <option value="all">All Users</option>
+          <option value="active">Active Users</option>
+          <option value="new">New Users</option>
+        </select>
+
+        <button
+          className={styles.generateBtn}
+          onClick={handleGenerateAndDownload}
+          disabled={isLoading}
+        >
+          {isLoading ? 'Generating…' : 'Generate & Download Report'}
+        </button>
       </div>
 
       <div className={styles.statsRow}>
@@ -49,7 +108,7 @@ const AdminReports = () => {
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Avg Score</span>
-            <h2 className={styles.statValue}>30%</h2>
+            <h2 className={styles.statValue}>{avgScore}%</h2>
           </div>
         </div>
         <div className={styles.statCard}>
@@ -58,10 +117,12 @@ const AdminReports = () => {
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Average Progress</span>
-            <h2 className={styles.statValue}>30%</h2>
+            <h2 className={styles.statValue}>{avgProgress}%</h2>
           </div>
         </div>
       </div>
+      {fetchError && <div className={styles.errorMessage}>{fetchError}</div>}
+      {isLoading && <div className={styles.loading}>Loading reports...</div>}
 
       <div className={styles.mainChartCard}>
         <h2 className={styles.chartTitle}>Learner Performance Over Time</h2>
@@ -87,7 +148,7 @@ const AdminReports = () => {
               <div key={i} className={styles.topicItem}>
                 <span className={styles.topicName}>{topic.name}</span>
                 <div className={styles.progressContainer}>
-                  <div className={styles.bar} style={{ width: `${(topic.count / 1000) * 100}px`, backgroundColor: topic.color }}></div>
+                  <div className={styles.bar} style={{ width: `${Math.min((topic.count / 1000) * 100, 100)}px`, backgroundColor: topic.color }}></div>
                   <span className={styles.topicCount}>{topic.count}</span>
                 </div>
               </div>
