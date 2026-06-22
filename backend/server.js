@@ -866,6 +866,54 @@ app.post('/api/admin/problems', async (req, res) => {
   }
 });
 
+  app.put('/api/admin/problems/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const {
+        title,
+        language,
+        concept,
+        difficulty,
+        problem_tier,
+        instruction,
+        expected_output
+      } = req.body;
+
+      if (!title || !language || !concept || !difficulty || !problem_tier) {
+        return res.status(400).json({ error: 'Missing required problem fields.' });
+      }
+
+      const { rows } = await db.query(
+        `UPDATE problems SET
+           title = $1,
+           language = $2,
+           concept = $3,
+           difficulty = $4,
+           problem_tier = $5,
+           instruction = $6,
+           expected_output = $7
+         WHERE id = $8
+         RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at`,
+        [
+          title,
+          language,
+          concept,
+          difficulty,
+          problem_tier,
+          instruction || '',
+          expected_output || '',
+          id
+        ]
+      );
+
+      if (!rows || rows.length === 0) return res.status(404).json({ error: 'Problem not found.' });
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('❌ UPDATE ADMIN PROBLEM:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
 app.delete('/api/admin/problems/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1041,83 +1089,191 @@ app.get('/api/admin/reports', async (req, res) => {
 });
 
 /* ══════════════════════════════════════
-   API — DOWNLOAD ADMIN REPORTS AS CSV
+   API — DOWNLOAD RESEARCH DATA (Comprehensive CSV)
    GET /api/admin/reports/download
 ══════════════════════════════════════ */
 app.get('/api/admin/reports/download', async (req, res) => {
   try {
-    const selectedTimeframe = req.query.timeframe || 'all';
-    const selectedUser = req.query.user || 'all';
-    const profileWhere = buildProfileWhereClause(selectedTimeframe, selectedUser);
-    const topicWhere = profileWhere.replace(/up\./g, '');
-    const errorWhere = profileWhere.replace(/up\./g, '');
-    const performanceWhere = buildPerformanceWhere(selectedTimeframe, selectedUser);
+    // Fetch all submissions with user and problem data
+    let submissions = [];
+    try {
+      const { rows } = await db.query(
+        `SELECT 
+           s.id,
+           u.name AS student_name,
+           u.email AS student_email,
+           p.title AS problem_title,
+           p.language,
+           p.concept,
+           p.difficulty,
+           p.problem_tier,
+           s.attempts,
+           s.time_spent,
+           s.is_correct,
+           s.syntax_errors,
+           s.structural_errors,
+           s.hint_used,
+           TO_CHAR(s.created_at, 'YYYY-MM-DD HH24:MI:SS') AS submission_time
+         FROM submissions s
+         JOIN users u ON s.user_id = u.id
+         JOIN problems p ON s.problem_id = p.id
+         ORDER BY s.created_at DESC`
+      );
+      submissions = rows || [];
+    } catch (err) {
+      console.warn('⚠️ Submissions query warning:', err.message);
+      submissions = [];
+    }
 
-    const { rows: metricsRows } = await db.query(
-      `SELECT
-         COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
-         COALESCE(ROUND(SUM(tasks_completed)::decimal / NULLIF(SUM(total_tasks), 0) * 100), 0) AS avg_progress
-       FROM user_profiles up
-       ${profileWhere}`
-    );
+    // Fetch user performance profiles
+    let profiles = [];
+    try {
+      const { rows } = await db.query(
+        `SELECT 
+           up.user_id,
+           u.name AS student_name,
+           u.email AS student_email,
+           up.language,
+           up.concept,
+           up.total_attempts,
+           up.tasks_completed,
+           up.total_tasks,
+           ROUND(up.success_rate * 100, 2) AS success_rate_percent,
+           ROUND(up.avg_time_spent, 2) AS avg_time_spent_sec,
+           ROUND(up.avg_attempts::numeric, 2) AS avg_attempts,
+           up.performance_level,
+           up.syntax_errors,
+           up.structural_errors
+         FROM user_profiles up
+         JOIN users u ON up.user_id = u.id
+         ORDER BY u.name, up.language, up.concept`
+      );
+      profiles = rows || [];
+    } catch (err) {
+      console.warn('⚠️ Profiles query warning:', err.message);
+      profiles = [];
+    }
 
-    const { rows: performanceRows } = await db.query(
-      `WITH months AS (
-         SELECT generate_series(
-           date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
-           date_trunc('month', CURRENT_DATE),
-           INTERVAL '1 month'
-         ) AS month
-       ), progress_by_month AS (
-         SELECT date_trunc('month', progress_date) AS month,
-                ROUND(AVG(score)) AS score,
-                ROUND(AVG(score) * 0.95) AS success
-         FROM daily_progress dp
-         ${performanceWhere}
-         GROUP BY 1
-       )
-       SELECT to_char(m.month, 'Mon ''YY') AS name,
-              COALESCE(pb.score, 0) AS score,
-              COALESCE(pb.success, 0) AS success
-       FROM months m
-       LEFT JOIN progress_by_month pb ON pb.month = m.month
-       ORDER BY m.month ASC`
-    );
+    // Fetch recommendations and effectiveness
+    let recommendations = [];
+    try {
+      const { rows } = await db.query(
+        `SELECT 
+           r.user_id,
+           u.name AS student_name,
+           sp.title AS source_problem,
+           sp.difficulty AS source_difficulty,
+           sp.concept AS source_concept,
+           rp.title AS recommended_problem,
+           rp.difficulty AS recommended_difficulty,
+           rp.concept AS recommended_concept,
+           ROUND(r.similarity_score::numeric, 2) AS similarity_score,
+           r.explanation,
+           TO_CHAR(r.created_at, 'YYYY-MM-DD HH24:MI:SS') AS recommendation_time
+         FROM recommendations r
+         JOIN users u ON r.user_id = u.id
+         JOIN problems sp ON r.source_problem_id = sp.id
+         JOIN problems rp ON r.recommended_problem_id = rp.id
+         ORDER BY r.created_at DESC`
+      );
+      recommendations = rows || [];
+    } catch (err) {
+      console.warn('⚠️ Recommendations query warning:', err.message);
+      recommendations = [];
+    }
 
-    const { rows: topicRows } = await db.query(
-      `SELECT concept AS name,
-              COUNT(*) AS count
-       FROM user_profiles up
-       ${topicWhere}
-       GROUP BY concept
-       ORDER BY count DESC
-       LIMIT 6`
-    );
+    // Build report data
+    const createdAt = new Date();
+    const generatedAt = createdAt.toLocaleString();
+    const uniqueStudents = new Set(submissions.map(s => s.student_email));
+    const uniqueConcepts = new Set(profiles.map(p => p.concept));
+    const uniqueLanguages = new Set(profiles.map(p => p.language));
+    const correctSubmissions = submissions.filter(s => s.is_correct).length;
+    const submissionSuccessRate = submissions.length > 0 ? ((correctSubmissions / submissions.length) * 100).toFixed(2) : '0.00';
+    const avgSuccessRate = profiles.length > 0
+      ? (profiles.reduce((sum, p) => sum + p.success_rate_percent, 0) / profiles.length).toFixed(2)
+      : '0.00';
 
-    const metrics = metricsRows[0] || { avg_score: 0, avg_progress: 0 };
+    let csvContent = 'Report Title, CodApt Research Data Export\n';
+    csvContent += `Report Generated By, CodApt Learning Analytics\n`;
+    csvContent += `Report Version, 1.0\n`;
+    csvContent += `Generated At, ${generatedAt}\n`;
+    csvContent += `Total Students, ${uniqueStudents.size}\n`;
+    csvContent += `Total Submissions, ${submissions.length}\n`;
+    csvContent += `Total Performance Profiles, ${profiles.length}\n`;
+    csvContent += `Total Recommendations, ${recommendations.length}\n`;
+    csvContent += `Unique Concepts, ${uniqueConcepts.size}\n`;
+    csvContent += `Unique Languages, ${uniqueLanguages.size}\n\n`;
 
-    let csvContent = 'CodApt Admin Report\n';
-    csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
-    csvContent += `Average Score,${metrics.avg_score}%\n`;
-    csvContent += `Average Progress,${metrics.avg_progress}%\n\n`;
-    
-    csvContent += 'Performance Data Over Time\n';
-    csvContent += 'Month,Score,Success Rate\n';
-    performanceRows.forEach(row => {
-      csvContent += `${row.name},${row.score},${row.success}\n`;
-    });
+    csvContent += 'SUBMISSIONS DATA\n';
+    csvContent += 'Student Name,Email,Problem Title,Language,Concept,Difficulty,Tier,Attempts,Time Spent (sec),Correct,Syntax Errors,Structural Errors,Hint Used,Submission Time\n';
+    if (submissions.length === 0) {
+      csvContent += 'No data available,,,,,,,,,,,,\n';
+    } else {
+      submissions.forEach(row => {
+        const correctStr = row.is_correct ? 'Yes' : 'No';
+        const hintStr = row.hint_used ? 'Yes' : 'No';
+        csvContent += `"${row.student_name}","${row.student_email}","${row.problem_title}","${row.language}","${row.concept}","${row.difficulty}","${row.problem_tier}",${row.attempts},${row.time_spent},${correctStr},${row.syntax_errors},${row.structural_errors},${hintStr},"${row.submission_time}"\n`;
+      });
+    }
 
-    csvContent += '\nTop Programming Topics\n';
-    csvContent += 'Topic,Count\n';
-    topicRows.forEach(row => {
-      csvContent += `${row.name},${row.count}\n`;
-    });
+    csvContent += '\nSTUDENT PERFORMANCE PROFILES\n';
+    csvContent += 'Student Name,Email,Language,Concept,Total Attempts,Tasks Completed,Total Tasks,Success Rate (%),Avg Time (sec),Avg Attempts,Performance Level,Syntax Errors,Structural Errors\n';
+    if (profiles.length === 0) {
+      csvContent += 'No data available,,,,,,,,,,,,\n';
+    } else {
+      profiles.forEach(row => {
+        csvContent += `"${row.student_name}","${row.student_email}","${row.language}","${row.concept}",${row.total_attempts},${row.tasks_completed},${row.total_tasks},${row.success_rate_percent},${row.avg_time_spent_sec},${row.avg_attempts},"${row.performance_level}",${row.syntax_errors},${row.structural_errors}\n`;
+      });
+    }
+
+    csvContent += '\nRECOMMENDATIONS & EFFECTIVENESS\n';
+    csvContent += 'Student Name,Source Problem,Source Difficulty,Source Concept,Recommended Problem,Recommended Difficulty,Recommended Concept,Similarity Score,Explanation,Recommendation Time\n';
+    if (recommendations.length === 0) {
+      csvContent += 'No data available,,,,,,,,,,,\n';
+    } else {
+      recommendations.forEach(row => {
+        const safeExplanation = (row.explanation || '').replace(/"/g, '""');
+        csvContent += `"${row.student_name}","${row.source_problem}","${row.source_difficulty}","${row.source_concept}","${row.recommended_problem}","${row.recommended_difficulty}","${row.recommended_concept}",${row.similarity_score},"${safeExplanation}","${row.recommendation_time}"\n`;
+      });
+    }
+
+    csvContent += '\nSUMMARY STATISTICS\n';
+    csvContent += `Metric,Value\n`;
+    csvContent += `Correct Submissions,${correctSubmissions}\n`;
+    csvContent += `Submission Success Rate (%),${submissionSuccessRate}\n`;
+    csvContent += `Average Student Success Rate (%),${avgSuccessRate}\n`;
+    csvContent += `Unique Concepts,${uniqueConcepts.size}\n`;
+    csvContent += `Unique Languages,${uniqueLanguages.size}\n`;
+    csvContent += `Report Notes,This export includes raw submissions, student profiles, recommendation results, and summary metrics for research reporting.\n`;
+    csvContent += `Generated By,CodApt Thesis Export Module\n`;
+    csvContent += `Export Format,CSV\n`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Report_${new Date().getTime()}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Research_Report_${createdAt.getFullYear()}${(createdAt.getMonth()+1).toString().padStart(2,'0')}${createdAt.getDate().toString().padStart(2,'0')}_${createdAt.getHours().toString().padStart(2,'0')}${createdAt.getMinutes().toString().padStart(2,'0')}${createdAt.getSeconds().toString().padStart(2,'0')}.csv"`);
     res.send(csvContent);
   } catch (err) {
-    console.error('❌ DOWNLOAD ADMIN REPORTS:', err.message);
+    console.error('❌ DOWNLOAD RESEARCH DATA:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/reset-experiment-data', async (req, res) => {
+  try {
+    const { rowCount: deletedSubmissions } = await db.query('DELETE FROM submissions');
+    const { rowCount: deletedProfiles } = await db.query('DELETE FROM user_profiles');
+    const { rowCount: deletedProgress } = await db.query('DELETE FROM daily_progress');
+    const { rowCount: deletedRecommendations } = await db.query('DELETE FROM recommendations');
+
+    res.json({
+      success: true,
+      deletedSubmissions,
+      deletedProfiles,
+      deletedProgress,
+      deletedRecommendations
+    });
+  } catch (err) {
+    console.error('❌ RESET EXPERIMENT DATA:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -25,6 +25,8 @@ const AdminCourses = () => {
   const [fetchError, setFetchError] = useState('');
   const [activeTab, setActiveTab] = useState('problems');
   const [showAddProblem, setShowAddProblem] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [showAddLanguage, setShowAddLanguage] = useState(false);
   const [newProblem, setNewProblem] = useState({
     title: '',
@@ -71,26 +73,41 @@ const AdminCourses = () => {
     loadContent();
   }, []);
 
-  const addProblem = async () => {
+  const saveProblem = async () => {
     if (!newProblem.title || !newProblem.concept) {
       setFetchError('Problem title and concept are required.');
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/problems`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProblem)
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to create problem');
+      if (isEditing && editingId) {
+        const res = await fetch(`${API_BASE_URL}/api/admin/problems/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newProblem)
+        });
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to update problem');
+        }
+        const updated = await res.json();
+        setProblems(problems.map(p => (p.id === editingId ? updated : p)));
+        setIsEditing(false);
+        setEditingId(null);
+      } else {
+        const res = await fetch(`${API_BASE_URL}/api/admin/problems`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newProblem)
+        });
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Failed to create problem');
+        }
+        const createdProblem = await res.json();
+        setProblems([createdProblem, ...problems]);
       }
 
-      const createdProblem = await res.json();
-      setProblems([createdProblem, ...problems]);
       setNewProblem({
         title: '',
         language: 'Python',
@@ -103,8 +120,8 @@ const AdminCourses = () => {
       setShowAddProblem(false);
       setFetchError('');
     } catch (err) {
-      console.error('Failed to add problem:', err);
-      setFetchError(err.message || 'Could not add problem.');
+      console.error('Failed to save problem:', err);
+      setFetchError(err.message || 'Could not save problem.');
     }
   };
 
@@ -204,7 +221,23 @@ const AdminCourses = () => {
         <div className={styles.contentSection}>
           <div className={styles.sectionHeader}>
             <h2>Problems</h2>
-            <button className={styles.addBtn} onClick={() => setShowAddProblem(true)}>
+            <button
+              className={styles.addBtn}
+              onClick={() => {
+                setShowAddProblem(true);
+                setIsEditing(false);
+                setEditingId(null);
+                setNewProblem({
+                  title: '',
+                  language: 'Python',
+                  concept: '',
+                  difficulty: 'Easy',
+                  problem_tier: 'Beginner',
+                  instruction: '',
+                  expected_output: ''
+                });
+              }}
+            >
               + Add Problem
             </button>
           </div>
@@ -265,7 +298,7 @@ const AdminCourses = () => {
                 value={newProblem.expected_output}
                 onChange={(e) => setNewProblem({ ...newProblem, expected_output: e.target.value })}
               />
-              <button className={styles.saveBtn} onClick={addProblem}>Save</button>
+              <button className={styles.saveBtn} onClick={saveProblem}>{isEditing ? 'Update' : 'Save'}</button>
               <button className={styles.cancelBtn} onClick={() => setShowAddProblem(false)}>Cancel</button>
             </div>
           )}
@@ -295,6 +328,25 @@ const AdminCourses = () => {
                     <td>{problem.difficulty}</td>
                     <td>{problem.problem_tier}</td>
                     <td>
+                      <button
+                        className={styles.editBtn}
+                        onClick={() => {
+                          setIsEditing(true);
+                          setEditingId(problem.id);
+                          setNewProblem({
+                            title: problem.title || '',
+                            language: problem.language || 'Python',
+                            concept: problem.concept || '',
+                            difficulty: problem.difficulty || 'Easy',
+                            problem_tier: problem.problem_tier || 'Beginner',
+                            instruction: problem.instruction || '',
+                            expected_output: problem.expected_output || ''
+                          });
+                          setShowAddProblem(true);
+                        }}
+                      >
+                        Edit
+                      </button>
                       <button className={styles.deleteBtn} onClick={() => deleteProblem(problem.id)}>
                         Delete
                       </button>
