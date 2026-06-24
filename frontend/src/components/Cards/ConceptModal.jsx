@@ -10,14 +10,14 @@ import styles from './ConceptModal.module.css';
 
 // Concept data
 const concepts = [
-  { name: "Variables", difficulty: "Easy", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/133.png" },
-  { name: "Data Types", difficulty: "Easy", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png" },
-  { name: "Operators", difficulty: "Easy", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/16.png" },
-  { name: "Conditionals", difficulty: "Intermediate", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png" },
-  { name: "Loops", difficulty: "Intermediate", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/41.png" },
-  { name: "Functions", difficulty: "Intermediate", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/50.png" },
-  { name: "Input & Output", difficulty: "Hard", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/151.png" },
-  { name: "Error Handling", difficulty: "Hard", image: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/149.png" }
+  { name: "Variables", difficulty: "Easy" },
+  { name: "Data Types", difficulty: "Easy" },
+  { name: "Operators", difficulty: "Easy" },
+  { name: "Conditionals", difficulty: "Intermediate" },
+  { name: "Loops", difficulty: "Intermediate" },
+  { name: "Functions", difficulty: "Intermediate" },
+  { name: "Input & Output", difficulty: "Hard" },
+  { name: "Error Handling", difficulty: "Hard" }
 ];
 
 // Concept descriptions

@@ -2,25 +2,31 @@ import React from 'react';
 import styles from './LanguageCards.module.css';
 import ThemeToggle from '../shared/ThemeToggle';
 import LanguageFlipCard from "./LanguageFlipCard";
+import javaCardImage from '../../assets/javaCard.jpg';
+import javascriptCardImage from '../../assets/JavascriptCard.jpg';
+import pythonCardImage from '../../assets/PythonCard.jpg';
+
+const CARD_IMAGES = {
+  Java: javaCardImage,
+  Python: pythonCardImage,
+  JavaScript: javascriptCardImage,
+};
 
 // Evolution chains per language
 // Beginner → Intermediate → Advanced
 const EVOLUTIONS = {
   Java: [
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png',
       label:       'Charmander',
       hp:          60,
       description: 'A beginner Java coder — small flame, big dreams. Still learning to compile without errors.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png',
       label:       'Charmeleon',
       hp:          90,
       description: 'An intermediate Java developer — the flame burns hotter. OOP concepts and logic are clicking.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png',
       label:       'Charizard',
       hp:          120,
       description: 'A Java master — commands the JVM with fire and fury. Enterprise systems fear this coder.',
@@ -28,19 +34,16 @@ const EVOLUTIONS = {
   ],
   Python: [
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/23.png',
       label:       'Ekans',
       hp:          45,
       description: 'A beginner Python coder — small and coiling. Just starting to wrap their head around syntax.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/24.png',
       label:       'Arbok',
       hp:          80,
       description: 'An intermediate Python dev — the snake grows stronger. Functions and data structures are in their grasp.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/497.png',
       label:       'Serperior',
       hp:          115,
       description: 'A Python master — elegant and powerful. Scripts data pipelines and AI models with regal precision.',
@@ -48,19 +51,16 @@ const EVOLUTIONS = {
   ],
   JavaScript: [
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/172.png',
       label:       'Pichu',
       hp:          40,
       description: 'A beginner JS coder — tiny sparks of logic. Still getting zapped by undefined errors.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png',
       label:       'Pikachu',
       hp:          75,
       description: 'An intermediate JS developer — the shocks are real now. Async functions and DOM events are no problem.',
     },
     {
-      pokemon:     'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png',
       label:       'Raichu',
       hp:          110,
       description: 'A JavaScript master — thunderous and fast. Builds full-stack apps and frameworks with pure electric power.',
@@ -141,7 +141,7 @@ const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHo
             hp={getEvolution('Java', progress).hp}
             type="Fire"
             color="#FF6700"
-            image={getEvolution('Java', progress).pokemon}
+            image={CARD_IMAGES.Java}
             evolutionLabel={getEvolution('Java', progress).label}
             userLevel={getLanguageCapability('Java', progress)}
             ability1={{ name:"Flame Compile", damage:40, desc:"Burn through compilation." }}
@@ -155,7 +155,7 @@ const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHo
             hp={getEvolution('Python', progress).hp}
             type="Grass"
             color="#4B8BBE"
-            image={getEvolution('Python', progress).pokemon}
+            image={CARD_IMAGES.Python}
             evolutionLabel={getEvolution('Python', progress).label}
             userLevel={getLanguageCapability('Python', progress)}
             ability1={{ name:"Script Coil", damage:30, desc:"Wrap opponents elegantly."           }}
@@ -169,7 +169,7 @@ const LanguageCards = ({ onSelect, isDarkMode, toggleTheme, onProfileClick, onHo
             hp={getEvolution('JavaScript', progress).hp}
             type="Electric"
             color="#F7DF1E"
-            image={getEvolution('JavaScript', progress).pokemon}
+            image={CARD_IMAGES.JavaScript}
             evolutionLabel={getEvolution('JavaScript', progress).label}
             userLevel={getLanguageCapability('JavaScript', progress)}
             ability1={{ name:"Dynamic Shock", damage:30, desc:"Shock enemies with dynamic typing." }}

@@ -64,9 +64,12 @@ function isConstructUsed(code, language, construct) {
 
     // ── Python ──────────────────────────────────────────────────
     case 'for':
-      // for <var(s)> in <iterable>:
-      // Handles: for i in x, for i,j in x, for (a,b) in x, for i in range(n):
-      return /\bfor\b.+\bin\b/.test(cleaned);
+      // Python: for <var(s)> in <iterable>:
+      // Java/JavaScript: for (...) loops
+      if (lang === 'python') {
+        return /\bfor\b.+\bin\b/.test(cleaned);
+      }
+      return /\bfor\s*\(/.test(cleaned);
 
     case 'while':
       // BUG FIX: Python uses `while cond:` not `while (cond)`
