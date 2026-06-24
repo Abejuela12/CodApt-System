@@ -41,9 +41,10 @@ function stripComments(code, language) {
 }
 
 function stripStrings(code) {
-  // Remove double-quoted, single-quoted, and template-literal string contents
+  // Remove Python triple-quoted strings and JS string literals
   return code
-    .replace(/`([^`\\]|\\.)*`/g, '``')         // JS template literals
+    .replace(/("""|''')[\s\S]*?\1/g, '')          // Python triple-quoted strings
+    .replace(/`([^`\\]|\\.)*`/g, '``')             // JS template literals
     .replace(/"([^"\\]|\\.)*"/g, '""')
     .replace(/'([^'\\]|\\.)*'/g, "''");
 }
@@ -64,19 +65,15 @@ function isConstructUsed(code, language, construct) {
 
     // ── Python ──────────────────────────────────────────────────
     case 'for':
-      // Python: for <var(s)> in <iterable>:
-      // Java/JavaScript: for (...) loops
       if (lang === 'python') {
         return /\bfor\b.+\bin\b/.test(cleaned);
       }
       return /\bfor\s*\(/.test(cleaned);
 
     case 'while':
-      // BUG FIX: Python uses `while cond:` not `while (cond)`
       if (lang === 'python') {
         return /\bwhile\s+[^:]+:/.test(cleaned);
       }
-      // Java / JavaScript
       return /\bwhile\s*\(/.test(cleaned);
 
     case 'if':
@@ -85,30 +82,109 @@ function isConstructUsed(code, language, construct) {
       }
       return /\bif\s*\(/.test(cleaned);
 
+    case 'if-else':
+      if (lang === 'python') {
+        return /\bif\b/.test(cleaned) && (/\belse\b/.test(cleaned) || /\belif\b/.test(cleaned));
+      }
+      return /\bif\b/.test(cleaned) && /\belse\b/.test(cleaned);
+
+    case 'else-if':
+      if (lang === 'python') {
+        return /\belif\b/.test(cleaned);
+      }
+      return /\belse\s+if\b/.test(cleaned);
+
+    case 'elif':
+      return /\belif\b/.test(cleaned);
+
     case 'def':
       return /\bdef\s+\w+\s*\(/.test(cleaned);
 
-    // ── Java ────────────────────────────────────────────────────
-    case 'void':
-      return /\bvoid\s+\w+\s*\(/.test(cleaned);
+    case 'function':
+      if (lang === 'python') {
+        return /\bdef\s+\w+\s*\(/.test(cleaned);
+      }
+      if (lang === 'java') {
+        return /\b(?:public|private|protected)?\s*(?:static\s+)?\w+\s+\w+\s*\([^)]*\)\s*\{/.test(cleaned);
+      }
+      return (
+        /\bfunction\s+\w+\s*\(/.test(cleaned)  ||
+        /\bfunction\s*\(/.test(cleaned)         ||
+        /\b(?:const|let|var)\s+\w+\s*=\s*\([^\)]*\)\s*=>/.test(cleaned) ||
+        /\b(?:const|let|var)\s+\w+\s*=\s*[^\s\(][^=]*=>/.test(cleaned) ||
+        /\b\w+\s*=\s*\([^\)]*\)\s*=>/.test(cleaned) ||
+        /\b\w+\s*=\s*[^\s\(][^=]*=>/.test(cleaned) ||
+        /\b(?:const|let|var)\s+\w+\s*=\s*function/.test(cleaned)
+      );
 
     case 'return':
       return /\breturn\b/.test(cleaned);
 
-    case 'try':
-      return /\btry\s*\{/.test(cleaned);
+    case 'void':
+      return /\bvoid\s+\w+\s*\(/.test(cleaned);
 
     case 'Scanner':
       return /\bScanner\b/.test(cleaned);
 
-    // ── JavaScript ──────────────────────────────────────────────
-    case 'function':
-      return (
-        /\bfunction\s+\w+\s*\(/.test(cleaned)  ||
-        /\bfunction\s*\(/.test(cleaned)         ||
-        /\bconst\s+\w+\s*=\s*\(/.test(cleaned) ||   // arrow fn
-        /\bconst\s+\w+\s*=\s*function/.test(cleaned)
-      );
+    case 'console.log':
+      return /\bconsole\.log\s*\(/.test(cleaned);
+
+    case 'printf':
+      return /\bprintf\s*\(/.test(cleaned);
+
+    case 'input':
+      return /\binput\s*\(/.test(cleaned);
+
+    case 'readline':
+      return /\breadline\b/.test(cleaned);
+
+    case 'const':
+      return /\bconst\b/.test(cleaned);
+
+    case 'let':
+      return /\blet\b/.test(cleaned);
+
+    case 'switch':
+      return /\bswitch\s*\(/.test(cleaned);
+
+    case 'ternary':
+      return /\?[^:\n]+:[^;\n]+/.test(cleaned);
+
+    case 'throw':
+      return /\bthrow\b/.test(cleaned);
+
+    case 'raise':
+      return /\braise\b/.test(cleaned);
+
+    case 'finally':
+      return /\bfinally\b/.test(cleaned);
+
+    case 'try-catch':
+      if (lang === 'python') {
+        return /\btry\b/.test(cleaned) && /\bexcept\b/.test(cleaned);
+      }
+      return /\btry\b/.test(cleaned) && /\bcatch\b/.test(cleaned);
+
+    case 'try-catch-finally':
+      if (lang === 'python') {
+        return /\btry\b/.test(cleaned) && /\bexcept\b/.test(cleaned) && /\bfinally\b/.test(cleaned);
+      }
+      return /\btry\b/.test(cleaned) && /\bcatch\b/.test(cleaned) && /\bfinally\b/.test(cleaned);
+
+    case 'try-except':
+      return /\btry\b/.test(cleaned) && /\bexcept\b/.test(cleaned);
+
+    case 'try-except-finally':
+      return /\btry\b/.test(cleaned) && /\bexcept\b/.test(cleaned) && /\bfinally\b/.test(cleaned);
+
+    case 'custom-exception':
+      return /\bclass\s+\w*Exception\b/.test(cleaned) || /\bextends\s+\w*Exception\b/.test(cleaned) || /\bthrow\s+new\b/.test(cleaned);
+
+    case 'exception-chaining':
+      return /\braise\b[^\n]*\bfrom\b/.test(cleaned) || /\binitCause\b/.test(cleaned) || /\bnew\b[^\n]*Exception\s*\([^\n]*,[^\n]*\)/.test(cleaned);
+
+    case 'multi-catch':
+      return /\bcatch\s*\([^\n]*\|[^\n]*\)/.test(cleaned);
 
     default: {
       const re = new RegExp(`\\b${construct}\\b`);
@@ -132,7 +208,8 @@ function isHardcoded(code, language, expectedOutput) {
   // short computed string that happens to match)
   if (trimmed.length > 40) return false;
 
-  const lines = code.split('\n').map(l => l.trim()).filter(Boolean);
+  const rawLines = code.split('\n');
+  const lines = rawLines.map(l => l.trim());
 
   // Escape special regex characters in the expected value
   const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -141,18 +218,54 @@ function isHardcoded(code, language, expectedOutput) {
   // value is the SOLE argument — not part of an expression.
   let printPattern;
   if (lang === 'python') {
-    // print("42")  or  print(42)  or  print('42')
     printPattern = new RegExp(
       `^print\\s*\\(\\s*[f]?['"]?${escaped}['"]?\\s*\\)$`
     );
   } else {
-    // console.log("42")  or  System.out.println("42")  (nothing else on line)
     printPattern = new RegExp(
       `(?:console\\.log|System\\.out\\.println(?:ln)?)\\s*\\(\\s*['"]?${escaped}['"]?\\s*\\)\\s*;?$`
     );
   }
 
-  return lines.some(line => printPattern.test(line));
+  for (let i = 0; i < lines.length; i++) {
+    if (!printPattern.test(lines[i])) continue;
+    if (isWithinControlFlowOrComputation(rawLines, i, lang)) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function isWithinControlFlowOrComputation(rawLines, index, lang) {
+  const line = rawLines[index];
+  const indent = line.match(/^\s*/)[0].length;
+
+  for (let j = index - 1; j >= 0; j--) {
+    const prevRaw = rawLines[j];
+    const prevTrim = prevRaw.trim();
+    if (!prevTrim) continue;
+
+    if (lang === 'python') {
+      const prevIndent = prevRaw.match(/^\s*/)[0].length;
+      if (prevIndent < indent && /\b(if|elif|else|for|while|try|except|finally|def|class)\b.*:\s*$/.test(prevTrim)) {
+        return true;
+      }
+      if (/\b(if|elif|else|for|while|try|except|finally|def|class)\b.*:\s*$/.test(prevTrim)) {
+        return true;
+      }
+    } else {
+      if (/\b(if|else if|else|for|while|switch|case|default|try|catch|finally)\b/.test(prevTrim)) {
+        return true;
+      }
+      if (/\b(function|def|class|void|public|private|protected|static)\b/.test(prevTrim) && /\{\s*$/.test(prevTrim)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // ─── syntax heuristics ───────────────────────────────────────────
@@ -257,7 +370,7 @@ function validateCFG(code, language, requiredConstruct, expectedOutput) {
   }
 
   // 2. Hardcoding check
-  const hardcoded = isHardcoded(code, language, expectedOutput);
+  const hardcoded = isHardcoded(code, language, expectedOutput, constructUsed);
 
   if (hardcoded) {
     structuralErrors++;

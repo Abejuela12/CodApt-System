@@ -401,13 +401,24 @@ app.post('/api/submit', async (req, res) => {
       [userId, language, concept]
     );
 
-    // Fetch real total task count
-    // SUPABASE (pg): COUNT(*) returns a string in pg — cast to int
+    // Fetch real total task count for the concept.
+    // user_profiles is scoped to language + concept, not difficulty.
+    // SUPABASE (pg): COUNT(*) returns a string in pg — cast to int.
     const { rows: problemCountRows } = await db.query(
-      `SELECT COUNT(*) AS total FROM problems WHERE language = $1 AND concept = $2 AND difficulty = $3`,
-      [language, concept, problem.difficulty || 'Easy']
+      `SELECT COUNT(*) AS total FROM problems WHERE language = $1 AND concept = $2`,
+      [language, concept]
     );
     const totalTasksInDB = parseInt(problemCountRows[0]?.total, 10) || 3;
+
+    // Determine whether this problem was already solved before this submission.
+    const { rows: previousSolveRows } = await db.query(
+      `SELECT COUNT(*) AS solved
+       FROM submissions
+       WHERE user_id = $1 AND problem_id = $2 AND is_correct = true`,
+      [userId, problemId]
+    );
+    const alreadySolved = parseInt(previousSolveRows[0]?.solved, 10) > 0;
+    const newlySolved = finalCorrect && !alreadySolved ? 1 : 0;
 
     if (existing.length === 0) {
       // SUPABASE (pg): $1–$10
@@ -437,7 +448,7 @@ app.post('/api/submit', async (req, res) => {
            structural_errors = structural_errors + $6
          WHERE user_id = $7 AND language = $8 AND concept = $9`,
         [
-          successValue, totalTasksInDB, successValue, timeSpent,
+          newlySolved, totalTasksInDB, successValue, timeSpent,
           syntaxErrors, structuralErrors,
           userId, language, concept
         ]
@@ -710,13 +721,15 @@ app.get('/api/progress/:userId', async (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
   try {
-    const { rows } = await db.query(
+    // Get all users with overall stats
+    const { rows: users } = await db.query(
       `SELECT
          u.id,
          u.name,
          u.username,
          u.email,
          u.photo,
+         TO_CHAR(u.created_at, 'YYYY-MM-DD') AS joined_date,
          COALESCE(SUM(up.tasks_completed), 0) AS tasks_completed,
          COALESCE(SUM(up.total_tasks), 0) AS total_tasks,
          CASE WHEN COALESCE(SUM(up.total_tasks), 0) > 0
@@ -727,34 +740,87 @@ app.get('/api/admin/users', async (req, res) => {
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
        LEFT JOIN daily_progress dp ON dp.user_id = u.id
-       GROUP BY u.id
+       GROUP BY u.id, u.created_at
        ORDER BY u.name ASC`
     );
 
-    const users = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      username: row.username,
-      email: row.email,
-      photo: row.photo || null,
-      progress: Number(row.progress),
-      completedLessons: Number(row.tasks_completed),
-      certificates: Number(row.concepts_count),
-      lastActive: row.last_active || 'Unknown',
-      isBanned: false,
-      scores: {
+    // For each user, fetch per-language stats
+    const enrichedUsers = await Promise.all(users.map(async (user) => {
+      const { rows: langStats } = await db.query(
+        `SELECT
+           language,
+           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
+           COALESCE(SUM(total_tasks), 0) AS total_tasks,
+           CASE WHEN COALESCE(SUM(total_tasks), 0) > 0
+             THEN ROUND(AVG(success_rate) * 100)
+             ELSE 0 END AS score
+         FROM user_profiles
+         WHERE user_id = $1
+         GROUP BY language
+         ORDER BY language ASC`,
+        [user.id]
+      );
+
+      // Create score object for each language
+      const scores = {
         python: 0,
         javascript: 0,
         java: 0
-      }
+      };
+
+      langStats.forEach(stat => {
+        const lang = (stat.language || '').toLowerCase();
+        if (lang === 'python') scores.python = Number(stat.score) || 0;
+        else if (lang === 'javascript') scores.javascript = Number(stat.score) || 0;
+        else if (lang === 'java') scores.java = Number(stat.score) || 0;
+      });
+
+      // Get language-specific progress details
+      const { rows: langProgress } = await db.query(
+        `SELECT
+           language,
+           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
+           COALESCE(SUM(total_tasks), 0) AS total_tasks
+         FROM user_profiles
+         WHERE user_id = $1
+         GROUP BY language
+         ORDER BY language ASC`,
+        [user.id]
+      );
+
+      const languageDetails = {};
+      langProgress.forEach(lp => {
+        const lang = (lp.language || '').toLowerCase();
+        languageDetails[lang] = {
+          tasksCompleted: Number(lp.tasks_completed) || 0,
+          totalTasks: Number(lp.total_tasks) || 0
+        };
+      });
+
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        photo: user.photo || null,
+        progress: Number(user.progress),
+        completedLessons: Number(user.tasks_completed),
+        certificates: Number(user.concepts_count),
+        enrolledDate: user.joined_date || 'Unknown',
+        lastActive: user.last_active || 'Unknown',
+        isBanned: false,
+        scores,
+        languageDetails
+      };
     }));
 
-    res.json(users);
+    res.json(enrichedUsers);
   } catch (err) {
     console.error('❌ GET ADMIN USERS:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.get('/api/admin/content', async (req, res) => {
   try {
