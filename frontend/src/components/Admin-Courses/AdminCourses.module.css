@@ -94,6 +94,69 @@
     font-size: 1.5rem;
 }
 
+.filterRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.searchWrapper {
+    flex: 1 1 240px;
+    min-width: 220px;
+    max-width: calc(100% - 380px);
+    margin-right: 12px;
+    min-width: 220px;
+}
+
+.searchInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 16px;
+    background: white;
+    border: 1px solid rgba(45, 88, 166, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(45, 88, 166, 0.08);
+    font-size: 0.95rem;
+    color: #333;
+    outline: none;
+}
+
+.searchInput:focus {
+    border-color: #2D58A6;
+    box-shadow: 0 10px 22px rgba(45, 88, 166, 0.14);
+}
+
+.filterGroup {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+}
+
+.filterSelect {
+    min-width: 170px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(45, 88, 166, 0.18);
+    background: white;
+    color: #333;
+    font-size: 0.95rem;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: calc(100% - 14px) center;
+    background-size: 12px 8px;
+}
+
+.filterSelect:focus {
+    border-color: #2D58A6;
+    box-shadow: 0 10px 22px rgba(45, 88, 166, 0.14);
+}
+
 .addBtn {
     background: #2D58A6;
     color: white;
@@ -110,30 +173,6 @@
     background: #1e3d7a;
 }
 
-.filterBar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-end;
-    margin-bottom: 20px;
-    padding: 15px;
-    background: #f5f5f5;
-    border-radius: 10px;
-}
-
-.filterGroup {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 190px;
-}
-
-.filterLabel {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #333;
-}
-
 .addForm {
     display: flex;
     gap: 10px;
@@ -146,7 +185,7 @@
 
 .inputField {
     flex: 1;
-    min-width: 120px;
+    min-width: 150px;
     padding: 10px 15px;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -263,6 +302,7 @@
     cursor: pointer;
     font-size: 0.85rem;
     margin-right: 5px;
+    min-width: 80px;
     transition: background 0.3s ease;
 }
 
@@ -278,6 +318,8 @@
     border-radius: 5px;
     cursor: pointer;
     font-size: 0.85rem;
+    min-width: 105px;
+    white-space: nowrap;
     transition: background 0.3s ease;
 }
 
@@ -285,25 +327,40 @@
     background: #c82333;
 }
 
-.actionCell {
-    width: 220px;
-    min-width: 220px;
-    white-space: nowrap;
-}
-
-.actionGroup {
-    display: flex;
-    justify-content: flex-start;
-    gap: 6px;
+.loadingInline {
+    display: inline-flex;
     align-items: center;
-    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(45, 88, 166, 0.08);
+    color: #2D58A6;
+    font-size: 0.95rem;
+    font-weight: 500;
+    margin-bottom: 20px;
 }
 
-.actionBtn {
-    min-width: 90px;
-    padding: 6px 10px;
-    text-align: center;
-    box-sizing: border-box;
+.loadingDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #2D58A6;
+    animation: pulseDot 1s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.4); }
+}
+
+.errorMessage {
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: #ffe8e8;
+    color: #9f3a38;
+    border: 1px solid #f5c2c2;
+    font-size: 0.95rem;
 }
 
 .languagesGrid {
