@@ -110,6 +110,30 @@
     background: #1e3d7a;
 }
 
+.filterBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 10px;
+}
+
+.filterGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 190px;
+}
+
+.filterLabel {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #333;
+}
+
 .addForm {
     display: flex;
     gap: 10px;
@@ -122,7 +146,7 @@
 
 .inputField {
     flex: 1;
-    min-width: 150px;
+    min-width: 120px;
     padding: 10px 15px;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -259,6 +283,27 @@
 
 .deleteBtn:hover {
     background: #c82333;
+}
+
+.actionCell {
+    width: 220px;
+    min-width: 220px;
+    white-space: nowrap;
+}
+
+.actionGroup {
+    display: flex;
+    justify-content: flex-start;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.actionBtn {
+    min-width: 90px;
+    padding: 6px 10px;
+    text-align: center;
+    box-sizing: border-box;
 }
 
 .languagesGrid {

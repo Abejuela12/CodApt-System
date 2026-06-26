@@ -15,8 +15,19 @@ const languageColorMap = {
   Java: '#007396',
 };
 
-const difficulties = ['Easy', 'Medium', 'Hard'];
+const difficultyOptions = [
+  { label: 'Basic', value: 'Easy' },
+  { label: 'Moderate', value: 'Intermediate' },
+  { label: 'Difficult', value: 'Hard' }
+];
 const tiers = ['Beginner', 'Intermediate', 'Advanced'];
+
+const formatDifficultyLabel = (difficulty) => {
+  if (difficulty === 'Easy') return 'Basic';
+  if (difficulty === 'Intermediate') return 'Moderate';
+  if (difficulty === 'Hard') return 'Difficult';
+  return difficulty;
+};
 
 const AdminCourses = () => {
   const [problems, setProblems] = useState([]);
@@ -38,6 +49,9 @@ const AdminCourses = () => {
     expected_output: ''
   });
   const [newLanguage, setNewLanguage] = useState({ name: '', icon: '' });
+  const [languageFilter, setLanguageFilter] = useState('All');
+  const [difficultyFilter, setDifficultyFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchProblems = async () => {
     const res = await fetch(`${API_BASE_URL}/api/admin/problems`);
@@ -125,20 +139,23 @@ const AdminCourses = () => {
     }
   };
 
-  const deleteProblem = async (id) => {
+  const toggleArchiveProblem = async (id, archived) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/problems/${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`${API_BASE_URL}/api/admin/problems/${id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived })
       });
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to delete problem');
+        throw new Error(errorData.error || 'Failed to archive problem');
       }
-      setProblems(problems.filter(problem => problem.id !== id));
+      const updatedProblem = await res.json();
+      setProblems(problems.map(problem => (problem.id === id ? updatedProblem : problem)));
       setFetchError('');
     } catch (err) {
-      console.error('Failed to delete problem:', err);
-      setFetchError(err.message || 'Could not delete problem.');
+      console.error('Failed to archive/unarchive problem:', err);
+      setFetchError(err.message || 'Could not update archive status.');
     }
   };
 
@@ -161,6 +178,17 @@ const AdminCourses = () => {
   const deleteLanguage = (id) => {
     setLanguages(languages.filter(lang => lang.id !== id));
   };
+
+  const filteredProblems = problems.filter((problem) => {
+    const languageMatch = languageFilter === 'All' || problem.language === languageFilter;
+    const difficultyMatch = difficultyFilter === 'All' || problem.difficulty === difficultyFilter;
+    const searchValue = searchQuery.trim().toLowerCase();
+    const searchMatch = !searchValue ||
+      problem.title.toLowerCase().includes(searchValue) ||
+      problem.concept.toLowerCase().includes(searchValue);
+
+    return languageMatch && difficultyMatch && searchMatch;
+  });
 
   const uniqueConceptCount = new Set(problems.map(problem => problem.concept)).size;
   const beginnerCount = problems.filter(problem => problem.problem_tier === 'Beginner').length;
@@ -242,6 +270,50 @@ const AdminCourses = () => {
             </button>
           </div>
 
+          <div className={styles.filterBar}>
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel} htmlFor="languageFilter">Language</label>
+              <select
+                id="languageFilter"
+                className={styles.selectField}
+                value={languageFilter}
+                onChange={(e) => setLanguageFilter(e.target.value)}
+              >
+                <option value="All">All Languages</option>
+                {languages.map((lang) => (
+                  <option key={lang.id} value={lang.name}>{lang.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel} htmlFor="difficultyFilter">Difficulty</label>
+              <select
+                id="difficultyFilter"
+                className={styles.selectField}
+                value={difficultyFilter}
+                onChange={(e) => setDifficultyFilter(e.target.value)}
+              >
+                <option value="All">All Difficulties</option>
+                {difficultyOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel} htmlFor="searchQuery">Search</label>
+              <input
+                id="searchQuery"
+                type="text"
+                className={styles.inputField}
+                placeholder="Search by title or concept"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           {showAddProblem && (
             <div className={styles.addForm}>
               <input
@@ -272,8 +344,8 @@ const AdminCourses = () => {
                 value={newProblem.difficulty}
                 onChange={(e) => setNewProblem({ ...newProblem, difficulty: e.target.value })}
               >
-                {difficulties.map((level) => (
-                  <option key={level} value={level}>{level}</option>
+                {difficultyOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
               <select
@@ -316,7 +388,7 @@ const AdminCourses = () => {
                 </tr>
               </thead>
               <tbody>
-                {problems.map((problem) => (
+                {filteredProblems.map((problem) => (
                   <tr key={problem.id}>
                     <td>{problem.title}</td>
                     <td>
@@ -325,31 +397,36 @@ const AdminCourses = () => {
                       </span>
                     </td>
                     <td>{problem.concept}</td>
-                    <td>{problem.difficulty}</td>
+                    <td>{formatDifficultyLabel(problem.difficulty)}</td>
                     <td>{problem.problem_tier}</td>
-                    <td>
-                      <button
-                        className={styles.editBtn}
-                        onClick={() => {
-                          setIsEditing(true);
-                          setEditingId(problem.id);
-                          setNewProblem({
-                            title: problem.title || '',
-                            language: problem.language || 'Python',
-                            concept: problem.concept || '',
-                            difficulty: problem.difficulty || 'Easy',
-                            problem_tier: problem.problem_tier || 'Beginner',
-                            instruction: problem.instruction || '',
-                            expected_output: problem.expected_output || ''
-                          });
-                          setShowAddProblem(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button className={styles.deleteBtn} onClick={() => deleteProblem(problem.id)}>
-                        Delete
-                      </button>
+                    <td className={styles.actionCell}>
+                      <div className={styles.actionGroup}>
+                        <button
+                          className={`${styles.editBtn} ${styles.actionBtn}`}
+                          onClick={() => {
+                            setIsEditing(true);
+                            setEditingId(problem.id);
+                            setNewProblem({
+                              title: problem.title || '',
+                              language: problem.language || 'Python',
+                              concept: problem.concept || '',
+                              difficulty: problem.difficulty || 'Easy',
+                              problem_tier: problem.problem_tier || 'Beginner',
+                              instruction: problem.instruction || '',
+                              expected_output: problem.expected_output || ''
+                            });
+                            setShowAddProblem(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className={`${styles.deleteBtn} ${styles.actionBtn}`}
+                          onClick={() => toggleArchiveProblem(problem.id, !problem.archived)}
+                        >
+                          {problem.archived ? 'Unarchive' : 'Archive'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
