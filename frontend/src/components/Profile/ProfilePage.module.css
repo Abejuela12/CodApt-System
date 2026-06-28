@@ -2,19 +2,24 @@
 
 /* --- Variables & Base --- */
 :root {
-  --bg-primary: #f0f4f8;
-  --bg-dark: #1a1a2e;
+  --bg-primary: #87ceeb;
+  --bg-dark: #0f1a2e;
   --card-bg: #ffffff;
-  --card-bg-dark: #1b365f;
+  --card-bg-dark: #1e2d5f;
   --card-border: #e0e6ed;
-  --card-border-dark: #1e3a5f;
+  --card-border-dark: #2d3f6f;
   --text-color: #333;
   --text-dark: #e0e0e0;
-  --accent-yellow: #ffcc00;
+  --accent-yellow: #fbbf24;
   --accent-green: #4caf50;
   --accent-blue: #3b82f6;
   --border-color: #ccc;
-  --border-dark: #1e3a5f;
+  --border-dark: #2d3f6f;
+}
+
+:global(html), :global(body), :global(#root) {
+  overflow: auto !important;
+  height: auto !important;
 }
 
 .container {
@@ -25,6 +30,8 @@
   font-family: 'Arial Black', 'Arial Bold', sans-serif;
   transition: background-color 0.3s ease;
   position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 [data-theme="dark"] .container {
@@ -167,13 +174,752 @@
 /* --- Main Content --- */
 .mainWrapper {
   display: flex;
-  justify-content: center;
-  align-items: stretch;
-  gap: 25px;
-  padding: 40px;
-  padding-bottom: 80px;
-  max-width: 1400px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px 24px 40px;
+  min-height: calc(100vh - 70px);
+  width: 100%;
+  max-width: 1420px;
   margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.sidebarProfile {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex-shrink: 0;
+  flex: 0 0 min(300px, 32vw);
+  max-width: 320px;
+}
+
+.compactProfileCard {
+  background: #1e2d5f;
+  border-radius: 16px;
+  padding: 20px 16px;
+  color: white;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(30, 45, 95, 0.3);
+  border: 1.5px solid rgba(100, 150, 200, 0.3);
+  flex-shrink: 0;
+}
+
+.profileCardAvatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: #ffffff;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  font-size: 36px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.profileCardImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profileCardName {
+  font-size: 16px;
+  font-weight: 900;
+  margin-bottom: 3px;
+  word-break: break-word;
+}
+
+.profileCardLevel {
+  font-size: 11px;
+  color: #a3b9d6;
+  margin-bottom: 16px;
+}
+
+.profileCardStats {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(100, 150, 200, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.statIcon {
+  font-size: 16px;
+}
+
+.statValue {
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.statLabel {
+  color: #a3b9d6;
+  font-size: 10px;
+}
+
+.viewProfileBtn {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  font-size: 13px;
+  transition: transform 0.2s ease;
+}
+
+.viewProfileBtn:hover {
+  transform: translateY(-2px);
+}
+
+.mainDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: visible;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding-right: 8px;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.dashboardTitle {
+  display: none;
+}
+
+[data-theme="dark"] .dashboardTitle {
+  display: none;
+}
+
+.accomplishmentsSection {
+  background: #1e2d5f;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1.5px solid rgba(100, 150, 200, 0.3);
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sectionTitle {
+  color: white;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.levelBadge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ef4444;
+  color: white;
+}
+
+.langSelectDropdown {
+  width: 100%;
+  background: #13213f;
+  color: white;
+  border: 1px solid rgba(100, 150, 200, 0.2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.progressContainer {
+  margin-bottom: 14px;
+}
+
+.progressBar {
+  width: 100%;
+  height: 7px;
+  background: #0f1a2e;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #86efac);
+  transition: width 0.4s ease;
+}
+
+.progressText {
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.conceptGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.conceptCard {
+  background: rgba(20, 50, 100, 0.3);
+  border: 1.5px solid rgba(100, 150, 200, 0.4);
+  border-radius: 12px;
+  padding: 12px;
+  transition: border-color 0.2s ease;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.conceptCard:hover {
+  border-color: rgba(100, 150, 200, 0.6);
+}
+
+.conceptHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.conceptName {
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+.conceptBadge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.conceptBar {
+  width: 100%;
+  height: 5px;
+  background: #0f1a2e;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.conceptBarFill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.conceptRate {
+  color: #a3b9d6;
+  font-size: 10px;
+  margin: 0;
+}
+
+.chartSection {
+  background: #1e2d5f;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1.5px solid rgba(100, 150, 200, 0.3);
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 70px;
+}
+
+.chartContainer {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  height: 280px;
+}
+
+/* --- Modals --- */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 26, 46, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.modalCard {
+  background: #1e2d5f;
+  border-radius: 20px;
+  border: 1.5px solid rgba(100, 150, 200, 0.3);
+  width: min(650px, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(15, 26, 46, 0.6);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(100, 150, 200, 0.2);
+}
+
+.modalHeader h2 {
+  color: white;
+  font-size: 22px;
+  margin: 0;
+  font-weight: 900;
+}
+
+.modalClose {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.modalContent {
+  padding: 28px;
+}
+
+.modalAvatarSection {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.modalAvatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  font-size: 36px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.modalAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cameraOverlay {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  background: rgba(0,0,0,0.5);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 14px;
+}
+
+.modalForm {
+  display: grid;
+  gap: 16px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formLabel {
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.formInput {
+  background: #13213f;
+  border: 1px solid rgba(100, 150, 200, 0.2);
+  color: white;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
+.formInput:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.submitBtn {
+  background: #22c55e;
+  color: #0f1a2e;
+  border: none;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  margin-top: 6px;
+  font-size: 13px;
+  transition: opacity 0.2s ease;
+}
+
+.submitBtn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.saveStatus {
+  color: #fbbf24;
+  font-size: 12px;
+  margin: 4px 0 0;
+  text-align: center;
+}
+
+.analysisOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 26, 46, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.analysisCard {
+  background: #1e2d5f;
+  border-radius: 18px;
+  padding: 28px;
+  border: 1.5px solid rgba(100, 150, 200, 0.3);
+  width: min(450px, 90%);
+  text-align: center;
+  position: relative;
+}
+
+.analysisCard h3 {
+  color: white;
+  font-size: 18px;
+  margin: 0 0 18px;
+  font-weight: 900;
+}
+
+.analysisClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.analysisContent {
+  color: #a3b9d6;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.percentDisplay {
+  font-size: 44px;
+  font-weight: 900;
+  color: #fbbf24;
+  margin: 14px 0;
+}
+
+.rankDisplay {
+  color: #facc15;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+/* --- Responsive --- */
+@media screen and (max-width: 1200px) {
+  .mainWrapper {
+    padding: 20px 16px;
+    gap: 20px;
+  }
+
+  .sidebarProfile {
+    width: 280px;
+  }
+
+  .mainDashboard {
+    width: min(100%, 800px);
+  }
+
+  .conceptGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media screen and (max-width: 1024px) {
+  .mainWrapper {
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-start;
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .sidebarProfile {
+    width: 280px;
+    order: 1;
+  }
+
+  .mainDashboard {
+    width: min(100%, 800px);
+    order: 2;
+  }
+
+  .conceptGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .accomplishmentsSection {
+    max-height: 500px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .mainWrapper {
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px;
+    gap: 16px;
+    height: auto;
+  }
+
+  .sidebarProfile {
+    width: 100%;
+    max-width: 300px;
+    flex-direction: row;
+    gap: 12px;
+    overflow-x: auto;
+    order: 1;
+  }
+
+  .compactProfileCard {
+    flex-shrink: 0;
+    min-width: 250px;
+    padding: 16px 14px;
+  }
+
+  .mainDashboard {
+    width: 100%;
+    max-width: 100%;
+    order: 2;
+  }
+
+  .accomplishmentsSection,
+  .chartSection {
+    padding: 16px;
+  }
+
+  .chartContainer {
+    height: 240px;
+  }
+
+  .conceptCard {
+    min-height: 110px;
+  }
+
+  .conceptGrid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .sectionTitle {
+    font-size: 12px;
+  }
+
+  .conceptName {
+    font-size: 12px;
+  }
+
+  .profileCardStats {
+    gap: 8px;
+  }
+
+  .statRow {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .statIcon {
+    font-size: 14px;
+  }
+
+  .statValue {
+    font-size: 12px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .mainWrapper {
+    padding: 12px 8px;
+    gap: 12px;
+  }
+
+  .sidebarProfile {
+    max-width: 100%;
+  }
+
+  .compactProfileCard {
+    min-width: auto;
+    width: 100%;
+    padding: 14px 12px;
+  }
+
+  .profileCardAvatar {
+    width: 60px;
+    height: 60px;
+    font-size: 28px;
+    margin-bottom: 10px;
+  }
+
+  .profileCardName {
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .profileCardLevel {
+    font-size: 10px;
+    margin-bottom: 12px;
+  }
+
+  .profileCardStats {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .statRow {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .viewProfileBtn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .accomplishmentsSection,
+  .chartSection {
+    padding: 12px;
+  }
+
+  .conceptGrid {
+    gap: 8px;
+  }
+
+  .conceptCard {
+    min-height: 100px;
+    padding: 10px;
+  }
+
+  .conceptHeader {
+    margin-bottom: 6px;
+  }
+
+  .conceptName {
+    font-size: 11px;
+  }
+
+  .conceptBadge {
+    font-size: 8px;
+    padding: 2px 6px;
+  }
+
+  .conceptRate {
+    font-size: 9px;
+  }
+
+  .sectionTitle {
+    font-size: 11px;
+  }
+
+  .chartContainer {
+    height: 200px;
+  }
+}
+
+/* --- Theme Support --- */
+[data-theme="light"] {
+  --bg-primary: #87ceeb;
+  --card-bg-dark: #1e2d5f;
+  --text-dark: #e0e0e0;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0f1a2e;
+  --card-bg-dark: #1e2d5f;
+  --text-dark: #e0e0e0;
+}
+
+[data-theme="light"] .container {
+  background-color: #87ceeb;
+}
+
+[data-theme="dark"] .container {
+  background-color: #0f1a2e;
+}
+
+[data-theme="light"] .navbar {
+  background-color: white;
+  border-bottom-color: #e0e6ed;
+}
+
+[data-theme="dark"] .navbar {
+  background-color: #16213e;
+  border-bottom-color: #2d3f6f;
 }
 
 /* --- Profile Card --- */

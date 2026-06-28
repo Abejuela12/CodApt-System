@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "node cfgValidator.test.js"
+    "scripts": {
+    "test:cfg": "node cfgValidator.test.js",
+    "test:cosine": "node utils/testCosineSimilarity.js",
+    "test:catalog": "node utils/problemCatalog.test.js",
+    "test:all": "node cfgValidator.test.js && node utils/testCosineSimilarity.js && node utils/problemCatalog.test.js",
+    "test:cart": "node utils/testCart.js"
   },
   "keywords": [],
   "author": "",
@@ -18,3 +22,5 @@
     "pg": "^8.21.0"
   }
 }
+
+

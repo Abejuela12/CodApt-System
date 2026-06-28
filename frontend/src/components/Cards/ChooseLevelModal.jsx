@@ -20,7 +20,7 @@ function ChooseLevelModal({ language, onClose, onSelectLevel }) {
             Intermediate
           </button>
           <button className="levelBtn" onClick={() => onSelectLevel("Hard")}>
-            Hard
+            Advanced
           </button>
         </div>
       </div>

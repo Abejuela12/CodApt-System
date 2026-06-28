@@ -10,43 +10,43 @@
       "syntax_errors",
       "structural_errors"
     ],
-    "trained_at": "2026-05-30T07:02:42.218Z"
+    "trained_at": "2026-06-24T14:41:30.707Z"
   },
   "tree": {
     "leaf": false,
     "feature": "success_rate",
-    "threshold": 0.475,
-    "gini": 0.31746031746031744,
-    "samples": 28,
+    "threshold": 0.79,
+    "gini": 0.32432432432432434,
+    "samples": 37,
     "left": {
-      "leaf": true,
-      "label": "Easy",
-      "samples": 10,
-      "distribution": {
-        "Easy": 10
-      }
-    },
-    "right": {
       "leaf": false,
       "feature": "success_rate",
-      "threshold": 0.79,
+      "threshold": 0.480769230769231,
       "gini": 0,
-      "samples": 18,
+      "samples": 24,
       "left": {
         "leaf": true,
-        "label": "Intermediate",
-        "samples": 10,
+        "label": "Easy",
+        "samples": 12,
         "distribution": {
-          "Intermediate": 10
+          "Easy": 12
         }
       },
       "right": {
         "leaf": true,
-        "label": "Hard",
-        "samples": 8,
+        "label": "Intermediate",
+        "samples": 12,
         "distribution": {
-          "Hard": 8
+          "Intermediate": 12
         }
+      }
+    },
+    "right": {
+      "leaf": true,
+      "label": "Hard",
+      "samples": 13,
+      "distribution": {
+        "Hard": 13
       }
     }
   }

@@ -6,39 +6,11 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { getConceptLevel } from '../../utils/levelUtils';
+import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats } from './profileLogic';
 
-const LANGUAGES = ['Java', 'Python', 'JavaScript'];
-const CONCEPTS  = ['Variables','Data Types','Operators','Conditional',
-                   'Loops','Functions','Input & Output','Error Handling'];
+const LANGUAGES = DEFAULT_LANGUAGES;
+const CONCEPTS  = DEFAULT_CONCEPTS;
 const API       = 'http://localhost:5000';
-
-// Language capability — based only on concepts the user actually attempted
-// Advanced: needs 4+ mastered concepts AND avg success >= 80
-// Intermediate: needs 2+ attempted AND avg success >= 50
-function getLanguageCapability(language, progress = {}) {
-  const langData  = progress[language] || {};
-  const attempted = CONCEPTS.filter(c => langData[c] && (langData[c]?.tasksCompleted ?? 0) > 0);
-  if (attempted.length === 0) return { label: 'Beginner', color: '#ef4444' };
-
-  const mastered   = attempted.filter(c => (langData[c]?.successRate ?? 0) >= 80);
-  const avgSuccess = attempted.reduce((sum, c) => sum + (langData[c]?.successRate ?? 0), 0) / attempted.length;
-
-  if (mastered.length >= 4 && avgSuccess >= 80) return { label: 'Advanced',     color: '#22c55e' };
-  if (attempted.length >= 2 && avgSuccess >= 50) return { label: 'Intermediate', color: '#facc15' };
-  return { label: 'Beginner', color: '#ef4444' };
-}
-
-// Mastery progress — only counts concepts with actual submissions
-function calcMasteryProgress(language, progress = {}) {
-  const langData  = progress[language] || {};
-  const attempted = CONCEPTS.filter(c => langData[c] && (langData[c]?.tasksCompleted ?? 0) > 0);
-  if (attempted.length === 0) return { masteredConcepts: 0, totalConcepts: CONCEPTS.length, percentage: 0, avgSuccess: 0 };
-
-  const avgSuccess       = attempted.reduce((sum, c) => sum + (langData[c]?.successRate ?? 0), 0) / attempted.length;
-  const masteredConcepts = attempted.filter(c => (langData[c]?.successRate ?? 0) >= 80).length;
-
-  return { masteredConcepts, totalConcepts: CONCEPTS.length, percentage: Math.round(avgSuccess), avgSuccess };
-}
 
 const ProfilePage = ({
   userData, onSave, isDarkMode, toggleTheme,
@@ -54,6 +26,9 @@ const ProfilePage = ({
   const [selectedLang, setSelectedLang]   = useState('Java');
   const [showAnalysis, setShowAnalysis]   = useState(false);
   const [isAnalyzing,  setIsAnalyzing]    = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isSaving, setIsSaving]          = useState(false);
+  const [saveError, setSaveError]        = useState('');
 
   const fetchProgress = useCallback(async () => {
     if (!userData?.id) return;
@@ -102,29 +77,23 @@ const ProfilePage = ({
   const langCapability = getLanguageCapability(selectedLang, progress);
   const langMastery    = calcMasteryProgress(selectedLang, progress);
 
-  const overall = (() => {
-    let totalMastered = 0, successSum = 0, langCount = 0;
-    LANGUAGES.forEach(lang => {
-      const m = calcMasteryProgress(lang, progress);
-      totalMastered += m.masteredConcepts;
-      if (m.avgSuccess > 0) { successSum += m.avgSuccess; langCount++; }
-    });
-    const avgSuccess = langCount > 0 ? Math.round(successSum / langCount) : 0;
-    const rank       = avgSuccess > 80 ? 'Gold' : avgSuccess > 50 ? 'Silver' : 'Bronze';
-    const langStats  = {};
-    LANGUAGES.forEach(lang => { langStats[lang] = calcMasteryProgress(lang, progress); });
-    let rec = '', actions = [];
-    if (avgSuccess < 20)      { rec = '🚀 Start Your Journey!';  actions = ['Complete Variables first','Practice regularly']; }
-    else if (avgSuccess < 50) { rec = '📈 Building Momentum!';   actions = ['Review incomplete concepts','Aim for 50% success rate']; }
-    else if (avgSuccess < 80) { rec = '⭐ Almost There!';         actions = ['Push for higher success rates','Try harder problems']; }
-    else                      { rec = '🎉 Coding Master!';        actions = ['Explore Advanced topics','Build real projects']; }
-    const trend  = avgSuccess > 70 ? 'consistently rising' : avgSuccess > 40 ? 'showing improvement' : 'just beginning';
-    const cons   = avgSuccess > 80 ? 'rock-solid consistency' : avgSuccess > 60 ? 'good consistency' : 'some ups and downs';
-    const interp = `Your graph shows a ${trend} pattern with ${cons}. You're ${avgSuccess > 70 ? 'mastering concepts quickly' : avgSuccess > 40 ? 'building momentum' : 'gaining valuable experience'}!`;
-    return { totalMastered, avgSuccess, rank, langStats, rec, actions, interp };
-  })();
+  const overall = buildOverallStats(progress, LANGUAGES, CONCEPTS);
 
-  const handleSubmit = async e => { e.preventDefault(); await onSave(form); setShowToast(true); };
+  const handleSubmit = async e => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      const result = await onSave(form);
+      const ok = result?.success !== false;
+      if (!ok) throw new Error(result?.error || 'Unable to save profile.');
+      setShowToast(true);
+    } catch (err) {
+      setSaveError(err?.message || 'Unable to save profile right now.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   const handlePhotoChange = e => {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -179,47 +148,102 @@ const ProfilePage = ({
 
       <main className={styles.mainWrapper}>
 
-        {/* Profile Card */}
-        <div className={styles.card}>
-          <h1 className={styles.title}>Profile</h1>
-          <div className={styles.headerSection}>
-            <div className={styles.avatarCircleLarge} onClick={() => fileInputRef.current?.click()}>
-              {form.photo ? <img src={form.photo} alt="Profile" className={styles.profilePhotoLarge} /> : <span>👤</span>}
-              <div className={styles.cameraIcon}>📷</div>
+        {/* Left Sidebar - Compact Profile Card */}
+        <aside className={styles.sidebarProfile}>
+          <div className={styles.compactProfileCard}>
+            <div className={styles.profileCardAvatar}>
+              {form.photo ? <img src={form.photo} alt="Profile" className={styles.profileCardImg} /> : (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              )}
             </div>
-            <input type="file" ref={fileInputRef} accept="image/*" onChange={handlePhotoChange} style={{ display:'none' }} />
-            <div className={styles.infoLabels}>
-              <div className={styles.labelYellow}>Name : <span>{userData?.name}</span></div>
-              <div className={styles.labelYellow}>Username : <span>{userData?.username}</span></div>
+            <div className={styles.profileCardName}>{userData?.name || userData?.username || 'User'}</div>
+            <div className={styles.profileCardLevel}>Level 1</div>
+            
+            <div className={styles.profileCardStats}>
+              <div className={styles.statRow}>
+                <span className={styles.statIcon}>🏆</span>
+                <span className={styles.statValue}>{overall.rank}</span>
+                <span className={styles.statLabel}>Rank</span>
+              </div>
+              <div className={styles.statRow}>
+                <span className={styles.statIcon}>🎖️</span>
+                <span className={styles.statValue}>{overall.totalMastered}</span>
+                <span className={styles.statLabel}>Mastered</span>
+              </div>
+            </div>
+
+            <button className={styles.viewProfileBtn} onClick={() => setShowProfileModal(true)}>
+              View Profile
+            </button>
+          </div>
+        </aside>
+
+        {/* Right Main - Accomplishments Dashboard */}
+        <div className={styles.mainDashboard}>
+          <h2 className={styles.dashboardTitle}>Dashboard</h2>
+
+          {/* Accomplishments Section */}
+          <div className={styles.accomplishmentsSection}>
+            <div className={styles.sectionHeader}>
+              <h3 className={styles.sectionTitle}>ACCOMPLISHMENTS</h3>
+              <div className={styles.levelBadge}
+                style={{ backgroundColor:`${langCapability.color}22`, color:langCapability.color, border:`1px solid ${langCapability.color}` }}>
+                {langCapability.label}
+              </div>
+            </div>
+
+            <select className={styles.langSelectDropdown} value={selectedLang} onChange={e => setSelectedLang(e.target.value)}>
+              {LANGUAGES.map(l => <option key={l}>{l}</option>)}
+            </select>
+
+            <div className={styles.progressContainer}>
+              <div className={styles.progressBar}>
+                <div className={styles.progressFill} style={{ width:`${langMastery.percentage}%` }} />
+              </div>
+              <span className={styles.progressText} onClick={() => setShowAnalysis(true)}
+                style={{ cursor:'pointer', textDecoration:'underline' }}>
+                {langMastery.masteredConcepts}/{langMastery.totalConcepts} concepts mastered ({langMastery.percentage}%) ▶
+              </span>
+            </div>
+
+            <div className={styles.conceptGrid}>
+              {loadingData ? (
+                <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'40px 20px', color:'#94a3b8' }}>Loading progress…</div>
+              ) : conceptRows.every(r => !r.hasData) ? (
+                <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'40px 20px', color:'#94a3b8' }}>
+                  No activity in {selectedLang} yet. Start a lesson!
+                </div>
+              ) : (
+                conceptRows.map(({ concept, success, masteryPct, isMastered, hasData, lvl }) => (
+                  <div key={concept} className={styles.conceptCard} style={{ opacity: hasData ? 1 : 0.4 }}>
+                    <div className={styles.conceptHeader}>
+                      <h4 className={styles.conceptName}>{concept}</h4>
+                      <span className={styles.conceptBadge} style={{ color:lvl.color, borderColor:lvl.color }}>
+                        {lvl.label}
+                      </span>
+                    </div>
+                    <div className={styles.conceptBar}>
+                      <div className={styles.conceptBarFill} style={{
+                        width: isMastered ? '100%' : `${masteryPct}%`,
+                        background: isMastered ? '#4ade80' : masteryPct >= 50 ? '#facc15' : masteryPct > 0 ? '#60a5fa' : '#334155'
+                      }} />
+                    </div>
+                    <p className={styles.conceptRate}>
+                      {hasData ? `${Math.round(success)}% success rate` : 'Not attempted yet'}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-          <form onSubmit={handleSubmit}>
-            {[
-              { label:'Name',     key:'name',     type:'text' },
-              { label:'Username', key:'username', type:'text' },
-              { label:'Email',    key:'email',    type:'email' },
-              { label:'Password', key:'password', type:'password' },
-            ].map(({ label, key, type }) => (
-              <div className={styles.formGroup} key={key}>
-                <label className={styles.fieldLabel}>{label}</label>
-                <input type={type} className={styles.inputField}
-                  value={form[key] || ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                  placeholder={type === 'password' ? '••••••••' : ''} />
-              </div>
-            ))}
-            <div className={styles.saveBtnWrapper}>
-              <button type="submit" className={styles.saveBtn}>Save</button>
-            </div>
-          </form>
-        </div>
-
-        {/* Stats Sidebar */}
-        <div className={styles.statsSidebar}>
 
           {/* Performance Chart */}
-          <div className={styles.miniCard}>
-            <h3 className={styles.miniTitle}>Performance Progress</h3>
-            <div className={styles.chartPlaceholder}>
+          <div className={styles.chartSection}>
+            <h3 className={styles.sectionTitle}>Performance Progress</h3>
+            <div className={styles.chartContainer}>
               {loadingData ? (
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#94a3b8', fontSize:13 }}>Loading chart…</div>
               ) : chartData.length === 0 || activeChartLangs.length === 0 ? (
@@ -227,7 +251,7 @@ const ProfilePage = ({
                   Complete tasks to see your performance chart.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
                     <XAxis dataKey="name" tick={{ fontSize:11, fill:'#94a3b8' }} />
@@ -245,121 +269,64 @@ const ProfilePage = ({
               )}
             </div>
           </div>
+        </div>
 
-          {/* Accomplishments */}
-          <div className={styles.miniCard}>
-            <div className={styles.miniCardHeader}>
-              <h3>Accomplishments</h3>
-              <div className={styles.levelBadge}
-                style={{ backgroundColor:`${langCapability.color}22`, color:langCapability.color, border:`1px solid ${langCapability.color}` }}>
-                {langCapability.label}
+        {/* Profile Edit Modal */}
+        {showProfileModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowProfileModal(false)}>
+            <div className={styles.modalCard} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h2>Edit Profile</h2>
+                <button className={styles.modalClose} onClick={() => setShowProfileModal(false)}>✕</button>
               </div>
-            </div>
 
-            <select className={styles.langSelect} value={selectedLang} onChange={e => setSelectedLang(e.target.value)}>
-              {LANGUAGES.map(l => <option key={l}>{l}</option>)}
-            </select>
+              <div className={styles.modalContent}>
+                <div className={styles.modalAvatarSection}>
+                  <div className={styles.modalAvatar} onClick={() => fileInputRef.current?.click()}>
+                    {form.photo ? <img src={form.photo} alt="Profile" /> : <span>👤</span>}
+                    <div className={styles.cameraOverlay}>📷</div>
+                  </div>
+                  <input type="file" ref={fileInputRef} accept="image/*" onChange={handlePhotoChange} style={{ display:'none' }} />
+                </div>
 
-            <div className={styles.progressContainer}>
-              <div className={styles.progressBar}>
-                <div className={styles.progressFill} style={{ width:`${langMastery.percentage}%` }} />
+                <form onSubmit={handleSubmit} className={styles.modalForm}>
+                  {[
+                    { label:'Name',     key:'name',     type:'text' },
+                    { label:'Username', key:'username', type:'text' },
+                    { label:'Email',    key:'email',    type:'email' },
+                    { label:'Password', key:'password', type:'password' },
+                  ].map(({ label, key, type }) => (
+                    <div className={styles.formGroup} key={key}>
+                      <label className={styles.formLabel}>{label}</label>
+                      <input type={type} className={styles.formInput} disabled={isSaving}
+                        value={form[key] || ''} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                        placeholder={type === 'password' ? '••••••••' : ''} />
+                    </div>
+                  ))}
+                  <button type="submit" className={styles.submitBtn} disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  {isSaving && <p className={styles.saveStatus}>Saving your information…</p>}
+                  {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
+                  {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
+                </form>
               </div>
-              <span className={styles.progressText} onClick={() => setShowAnalysis(true)}
-                style={{ cursor:'pointer', textDecoration:'underline' }}
-                onMouseEnter={e => e.target.style.color = '#ffcc00'}
-                onMouseLeave={e => e.target.style.color = ''}>
-                {langMastery.masteredConcepts}/{langMastery.totalConcepts} concepts mastered ({langMastery.percentage}%) ▶
-              </span>
-            </div>
-
-            <div className={styles.accomplishList}>
-              {loadingData ? (
-                <div style={{ color:'#94a3b8', fontSize:13, textAlign:'center', padding:'20px 0' }}>Loading progress…</div>
-              ) : conceptRows.every(r => !r.hasData) ? (
-                <div style={{ color:'#94a3b8', fontSize:13, textAlign:'center', padding:'20px 0' }}>
-                  No activity in {selectedLang} yet. Start a lesson!
-                </div>
-              ) : conceptRows.map(({ concept, success, masteryPct, isMastered, hasData, lvl }) => (
-                <div key={concept} className={styles.accomplishItem} style={{ opacity: hasData ? 1 : 0.3 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <p className={styles.accomplishTitle}>
-                      {concept}{isMastered && <span style={{ marginLeft:6, fontSize:12 }}>✅</span>}
-                    </p>
-                    <span style={{ padding:'3px 8px', borderRadius:'999px', fontSize:'10px', fontWeight:'700',
-                      backgroundColor:`${lvl.color}22`, color:lvl.color, border:`1px solid ${lvl.color}` }}>
-                      {lvl.label}
-                    </span>
-                  </div>
-                  <div className={styles.accomplishBar}>
-                    <div className={styles.accomplishFill} style={{
-                      width: isMastered ? '100%' : `${masteryPct}%`,
-                      background: isMastered ? '#4ade80' : masteryPct >= 50 ? '#facc15' : masteryPct > 0 ? '#60a5fa' : '#334155'
-                    }} />
-                  </div>
-                  <p className={styles.accomplishRate}>
-                    {hasData ? `${Math.round(success)}% success rate${isMastered ? ' — Mastered! 🎉' : ''}` : 'Not attempted yet'}
-                  </p>
-                </div>
-              ))}
             </div>
           </div>
-        </div>
+        )}
 
         {/* Analysis Modal */}
         {showAnalysis && (
-          <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%',
-            backgroundColor:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', justifyContent:'center', alignItems:'center' }}
-            onClick={() => setShowAnalysis(false)}>
-            <div className={styles.compactAnalysis} onClick={e => e.stopPropagation()}>
-              {isAnalyzing ? (
-                <div className={styles.compactLoader}>
-                  <div className={styles.miniLoadingBars}>
-                    {[0,1,2].map(i => <div key={i} className={`${styles.miniBar} ${styles[`miniPulse${i}`]}`} />)}
-                  </div>
-                  <div className={styles.miniProgress}>Analysing your data…</div>
-                </div>
-              ) : (
-                <div className={styles.analysisCard}>
-                  <div className={styles.cardHeader}>
-                    <h3>📊 Your Progress Story</h3>
-                    <button onClick={() => setShowAnalysis(false)} className={styles.cardClose}>✕</button>
-                  </div>
-                  <div className={styles.achievementSummary}>
-                    <div className={styles.percentBig}>{overall.avgSuccess}<span>%</span></div>
-                    <div className={styles.tasksCompleted}>{overall.totalMastered} concepts mastered across all languages</div>
-                    <div className={styles.rankBadge}>{overall.rank} Rank</div>
-                  </div>
-                  <div className={styles.graphInsight}>
-                    <div className={styles.insightIcon}>📈</div>
-                    <p>{overall.interp}</p>
-                  </div>
-                  <div className={styles.langQuick}>
-                    <h4>Language Status:</h4>
-                    <div className={styles.langRow}>
-                      {LANGUAGES.map(lang => {
-                        const s   = overall.langStats[lang];
-                        const cap = getLanguageCapability(lang, progress);
-                        return (
-                          <div key={lang} className={styles.langQuickItem}>
-                            <span>{lang.slice(0,2)}</span>
-                            <strong style={{ color: cap.color }}>{cap.label}</strong>
-                            <span style={{ fontSize:10, color:'#64748b' }}>
-                              {s.avgSuccess > 0 ? `${Math.round(s.avgSuccess)}% avg` : 'No activity'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className={styles.nextSteps}>
-                    <h4>🎯 {overall.rec}</h4>
-                    <div className={styles.stepList}>
-                      {overall.actions.map((step, i) => <div key={i} className={styles.stepItem}>{i+1}. {step}</div>)}
-                    </div>
-                  </div>
-                  <button className={styles.continueBtn} onClick={() => setShowAnalysis(false)}>Continue Learning →</button>
-                </div>
-              )}
+          <div className={styles.analysisOverlay} onClick={() => setShowAnalysis(false)}>
+            <div className={styles.analysisCard} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowAnalysis(false)} className={styles.analysisClose}>✕</button>
+              <h3>📊 Your Progress Story</h3>
+              <div className={styles.analysisContent}>
+                <div className={styles.percentDisplay}>{overall.avgSuccess}%</div>
+                <p>{overall.totalMastered} concepts mastered across all languages</p>
+                <p className={styles.rankDisplay}>{overall.rank} Rank</p>
+                <p>{overall.interp}</p>
+              </div>
             </div>
           </div>
         )}
