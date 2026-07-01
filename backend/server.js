@@ -41,6 +41,20 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+async function ensureArchivedColumn() {
+  try {
+    await db.query(
+      `ALTER TABLE problems
+       ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE`
+    );
+    console.log('✅ ensured problems.archived column exists');
+  } catch (err) {
+    console.error('❌ Failed to ensure problems.archived column:', err.message);
+  }
+}
+
+ensureArchivedColumn();
+
 /* ─────────────────────────────────────
    HELPER — SHA-256 password hash
 ───────────────────────────────────── */
@@ -902,7 +916,7 @@ app.get('/api/admin/content', async (req, res) => {
 app.get('/api/admin/problems', async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at
+      `SELECT id, title, language, concept, difficulty, problem_tier, instruction, expected_output, archived, created_at
        FROM problems
        ORDER BY created_at DESC`
     );
@@ -963,7 +977,8 @@ app.post('/api/admin/problems', async (req, res) => {
         difficulty,
         problem_tier,
         instruction,
-        expected_output
+        expected_output,
+        archived
       } = req.body;
 
       if (!title || !language || !concept || !difficulty || !problem_tier) {
@@ -978,9 +993,10 @@ app.post('/api/admin/problems', async (req, res) => {
            difficulty = $4,
            problem_tier = $5,
            instruction = $6,
-           expected_output = $7
-         WHERE id = $8
-         RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, created_at`,
+           expected_output = $7,
+           archived = COALESCE($8, archived)
+         WHERE id = $9
+         RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, archived, created_at`,
         [
           title,
           language,
@@ -989,6 +1005,7 @@ app.post('/api/admin/problems', async (req, res) => {
           problem_tier,
           instruction || '',
           expected_output || '',
+          archived,
           id
         ]
       );
@@ -1000,6 +1017,31 @@ app.post('/api/admin/problems', async (req, res) => {
       res.status(500).json({ error: err.message });
     }
   });
+
+app.patch('/api/admin/problems/:id/archive', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { archived } = req.body;
+
+    if (typeof archived !== 'boolean') {
+      return res.status(400).json({ error: 'archived must be a boolean.' });
+    }
+
+    const { rows } = await db.query(
+      `UPDATE problems SET archived = $1 WHERE id = $2 RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, archived, created_at`,
+      [archived, id]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'Problem not found.' });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('❌ PATCH ADMIN PROBLEM ARCHIVE:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.delete('/api/admin/problems/:id', async (req, res) => {
   try {

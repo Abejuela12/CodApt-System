@@ -15,8 +15,16 @@ const languageColorMap = {
   Java: '#007396',
 };
 
-const difficulties = ['Easy', 'Medium', 'Hard'];
+const difficulties = ['Basic', 'Moderate', 'Difficult'];
 const tiers = ['Beginner', 'Intermediate', 'Advanced'];
+
+const normalizeDifficulty = (value) => {
+  const normalized = String(value || '').trim();
+  if (normalized === 'Easy' || normalized === 'Beginner') return 'Basic';
+  if (normalized === 'Medium' || normalized === 'Intermediate') return 'Moderate';
+  if (normalized === 'Hard' || normalized === 'Advanced') return 'Difficult';
+  return normalized || 'Basic';
+};
 
 const AdminCourses = () => {
   const [problems, setProblems] = useState([]);
@@ -28,11 +36,14 @@ const AdminCourses = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showAddLanguage, setShowAddLanguage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [languageFilter, setLanguageFilter] = useState('All Languages');
+  const [difficultyFilter, setDifficultyFilter] = useState('All Difficulties');
   const [newProblem, setNewProblem] = useState({
     title: '',
     language: 'Python',
     concept: '',
-    difficulty: 'Easy',
+    difficulty: 'Basic',
     problem_tier: 'Beginner',
     instruction: '',
     expected_output: ''
@@ -61,7 +72,11 @@ const AdminCourses = () => {
           fetchProblems(),
           fetchLanguages()
         ]);
-        setProblems(problemsData);
+        setProblems(problemsData.map(problem => ({
+          ...problem,
+          archived: problem.archived ?? false,
+          difficulty: normalizeDifficulty(problem.difficulty)
+        })));
         setLanguages(languagesData);
       } catch (err) {
         console.error('Failed to load admin content:', err);
@@ -91,7 +106,9 @@ const AdminCourses = () => {
           throw new Error(errorData.error || 'Failed to update problem');
         }
         const updated = await res.json();
-        setProblems(problems.map(p => (p.id === editingId ? updated : p)));
+        setProblems(prevProblems => prevProblems.map(p =>
+          p.id === editingId ? { ...updated, archived: p.archived ?? false, difficulty: normalizeDifficulty(updated.difficulty) } : p
+        ));
         setIsEditing(false);
         setEditingId(null);
       } else {
@@ -105,14 +122,14 @@ const AdminCourses = () => {
           throw new Error(errorData.error || 'Failed to create problem');
         }
         const createdProblem = await res.json();
-        setProblems([createdProblem, ...problems]);
+        setProblems(prevProblems => [{ ...createdProblem, archived: false, difficulty: normalizeDifficulty(createdProblem.difficulty) }, ...prevProblems]);
       }
 
       setNewProblem({
         title: '',
         language: 'Python',
         concept: '',
-        difficulty: 'Easy',
+        difficulty: 'Basic',
         problem_tier: 'Beginner',
         instruction: '',
         expected_output: ''
@@ -125,20 +142,34 @@ const AdminCourses = () => {
     }
   };
 
-  const deleteProblem = async (id) => {
+  const toggleArchiveProblem = async (id, currentArchived) => {
+    const nextArchived = !currentArchived;
+    setProblems(prevProblems => prevProblems.map(problem =>
+      problem.id === id ? { ...problem, archived: nextArchived } : problem
+    ));
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/problems/${id}`, {
-        method: 'DELETE'
+      const res = await fetch(`${API_BASE_URL}/api/admin/problems/${id}/archive`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: nextArchived })
       });
+
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to delete problem');
+        throw new Error(errorData.error || 'Failed to update archive state');
       }
-      setProblems(problems.filter(problem => problem.id !== id));
-      setFetchError('');
+
+      const updated = await res.json();
+      setProblems(prevProblems => prevProblems.map(problem =>
+        problem.id === id ? { ...problem, ...updated, difficulty: normalizeDifficulty(updated.difficulty) } : problem
+      ));
     } catch (err) {
-      console.error('Failed to delete problem:', err);
-      setFetchError(err.message || 'Could not delete problem.');
+      console.error('Failed to toggle archive state:', err);
+      setFetchError(err.message || 'Could not update archive state.');
+      setProblems(prevProblems => prevProblems.map(problem =>
+        problem.id === id ? { ...problem, archived: currentArchived } : problem
+      ));
     }
   };
 
@@ -164,6 +195,25 @@ const AdminCourses = () => {
 
   const uniqueConceptCount = new Set(problems.map(problem => problem.concept)).size;
   const beginnerCount = problems.filter(problem => problem.problem_tier === 'Beginner').length;
+
+  const languageOptions = Array.from(new Set([
+    ...languages.map(lang => lang.name),
+    ...problems.map(problem => problem.language)
+  ])).filter(Boolean);
+
+  const filteredProblems = problems.filter(problem => {
+    const normalizedProblemDifficulty = normalizeDifficulty(problem.difficulty);
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch =
+      problem.title.toLowerCase().includes(searchLower) ||
+      problem.concept.toLowerCase().includes(searchLower);
+    const matchesLanguage =
+      languageFilter === 'All Languages' || problem.language === languageFilter;
+    const matchesDifficulty =
+      difficultyFilter === 'All Difficulties' || normalizedProblemDifficulty === difficultyFilter;
+
+    return matchesSearch && matchesLanguage && matchesDifficulty;
+  });
 
   return (
     <div className={styles.coursesPanelWrapper}>
@@ -200,7 +250,12 @@ const AdminCourses = () => {
         </div>
       </div>
       {fetchError && <div className={styles.errorMessage}>{fetchError}</div>}
-      {isLoading && <div className={styles.loading}>Loading admin content...</div>}
+      {isLoading && (
+        <div className={styles.loadingInline}>
+          <span className={styles.loadingDot} />
+          Loading content...
+        </div>
+      )}
 
       <div className={styles.tabContainer}>
         <button
@@ -231,7 +286,7 @@ const AdminCourses = () => {
                   title: '',
                   language: 'Python',
                   concept: '',
-                  difficulty: 'Easy',
+                  difficulty: 'Basic',
                   problem_tier: 'Beginner',
                   instruction: '',
                   expected_output: ''
@@ -272,8 +327,8 @@ const AdminCourses = () => {
                 value={newProblem.difficulty}
                 onChange={(e) => setNewProblem({ ...newProblem, difficulty: e.target.value })}
               >
-                {difficulties.map((level) => (
-                  <option key={level} value={level}>{level}</option>
+                {difficulties.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>{difficulty}</option>
                 ))}
               </select>
               <select
@@ -303,6 +358,40 @@ const AdminCourses = () => {
             </div>
           )}
 
+          <div className={styles.filterRow}>
+            <div className={styles.searchWrapper}>
+              <input
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search problems..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className={styles.filterGroup}>
+              <select
+                className={styles.filterSelect}
+                value={languageFilter}
+                onChange={(e) => setLanguageFilter(e.target.value)}
+              >
+                <option value="All Languages">All Languages</option>
+                {languageOptions.map((lang) => (
+                  <option key={lang} value={lang}>{lang}</option>
+                ))}
+              </select>
+              <select
+                className={styles.filterSelect}
+                value={difficultyFilter}
+                onChange={(e) => setDifficultyFilter(e.target.value)}
+              >
+                <option value="All Difficulties">All Difficulties</option>
+                {difficulties.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>{difficulty}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className={styles.tableContainer}>
             <table className={styles.table}>
               <thead>
@@ -316,7 +405,7 @@ const AdminCourses = () => {
                 </tr>
               </thead>
               <tbody>
-                {problems.map((problem) => (
+                {filteredProblems.map((problem) => (
                   <tr key={problem.id}>
                     <td>{problem.title}</td>
                     <td>
@@ -325,7 +414,7 @@ const AdminCourses = () => {
                       </span>
                     </td>
                     <td>{problem.concept}</td>
-                    <td>{problem.difficulty}</td>
+                    <td>{normalizeDifficulty(problem.difficulty)}</td>
                     <td>{problem.problem_tier}</td>
                     <td>
                       <button
@@ -337,7 +426,7 @@ const AdminCourses = () => {
                             title: problem.title || '',
                             language: problem.language || 'Python',
                             concept: problem.concept || '',
-                            difficulty: problem.difficulty || 'Easy',
+                            difficulty: normalizeDifficulty(problem.difficulty) || 'Basic',
                             problem_tier: problem.problem_tier || 'Beginner',
                             instruction: problem.instruction || '',
                             expected_output: problem.expected_output || ''
@@ -347,8 +436,8 @@ const AdminCourses = () => {
                       >
                         Edit
                       </button>
-                      <button className={styles.deleteBtn} onClick={() => deleteProblem(problem.id)}>
-                        Delete
+                      <button className={styles.deleteBtn} onClick={() => toggleArchiveProblem(problem.id, problem.archived)}>
+                        {problem.archived ? 'Unarchive' : 'Archive'}
                       </button>
                     </td>
                   </tr>
@@ -400,7 +489,7 @@ const AdminCourses = () => {
                 <p className={styles.studentCount}>{lang.students} students</p>
                 <div className={styles.cardActions}>
                   <button className={styles.editBtn}>Edit</button>
-                  <button className={styles.deleteBtn} onClick={() => deleteLanguage(lang.id)}>Delete</button>
+                  <button className={styles.deleteBtn} onClick={() => deleteLanguage(lang.id)}>Archive</button>
                 </div>
               </div>
             ))}
