@@ -120,7 +120,14 @@ const ProfilePage = ({
 
   return (
     <div className={styles.container}>
-      {showToast && <div className={styles.toast}>✔ Saved successfully!</div>}
+      {showToast && (
+        <div className={styles.saveToast}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Profile saved successfully
+        </div>
+      )}
 
       <nav className={styles.navbar}>
         <img src="/CODAPT_LOGO.png" alt="Codapt" className={styles.logo} onClick={onHomeClick} />
@@ -161,7 +168,7 @@ const ProfilePage = ({
             </div>
             <div className={styles.profileCardName}>{userData?.name || userData?.username || 'User'}</div>
             <div className={styles.profileCardLevel}>Level 1</div>
-            
+
             <div className={styles.profileCardStats}>
               <div className={styles.statRow}>
                 <span className={styles.statIcon}>🏆</span>
@@ -181,7 +188,7 @@ const ProfilePage = ({
           </div>
         </aside>
 
-        {/* Right Main - Accomplishments Dashboard */}
+        {/* Right Main - Accomplishments + Chart, side by side */}
         <div className={styles.mainDashboard}>
           <h2 className={styles.dashboardTitle}>Dashboard</h2>
 
@@ -251,7 +258,7 @@ const ProfilePage = ({
                   Complete tasks to see your performance chart.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
                     <XAxis dataKey="name" tick={{ fontSize:11, fill:'#94a3b8' }} />
@@ -303,11 +310,13 @@ const ProfilePage = ({
                         placeholder={type === 'password' ? '••••••••' : ''} />
                     </div>
                   ))}
-                  <button type="submit" className={styles.submitBtn} disabled={isSaving}>
-                    {isSaving ? 'Saving...' : 'Save Changes'}
-                  </button>
+
+                  <div className={styles.formActionsRow}>
+                    <button type="submit" className={styles.submitBtn} disabled={isSaving}>
+                      {isSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
                   {isSaving && <p className={styles.saveStatus}>Saving your information…</p>}
-                  {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
                   {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
                 </form>
               </div>

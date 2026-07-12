@@ -150,37 +150,19 @@
   object-fit: cover;
 }
 
-
-/* .menuList {
-  list-style: none;
-  padding: 10px 0;
-  margin: 0;
-  text-align: center;
-}
-
-.menuList li a {
-  display: block;
-  padding: 10px 15px;
-  color: white;
-  text-decoration: none;
-  font-size: 14px;
-  transition: background-color 0.2s ease;
-}
-
-.menuList li a:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-} */
-
 /* --- Main Content --- */
+/* 3-column desktop layout: profile card | accomplishments | chart.
+   Fits within the viewport height so nothing needs scrolling on desktop. */
 .mainWrapper {
   display: flex;
   justify-content: flex-start;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 24px 24px 40px;
-  min-height: calc(100vh - 70px);
+  align-items: stretch;
+  gap: 20px;
+  padding: 20px 24px;
+  height: calc(100vh - 70px);
+  overflow: hidden;
   width: 100%;
-  max-width: 1420px;
+  max-width: 1600px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -190,8 +172,10 @@
   flex-direction: column;
   gap: 20px;
   flex-shrink: 0;
-  flex: 0 0 min(300px, 32vw);
-  max-width: 320px;
+  flex: 0 0 min(280px, 30vw);
+  max-width: 300px;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .compactProfileCard {
@@ -287,15 +271,15 @@
   transform: translateY(-2px);
 }
 
+/* Right side: accomplishments + chart side by side */
 .mainDashboard {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 16px;
-  overflow: visible;
+  height: 100%;
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  padding-right: 8px;
   box-sizing: border-box;
   position: relative;
 }
@@ -313,9 +297,13 @@
   border-radius: 16px;
   padding: 20px;
   border: 1.5px solid rgba(100, 150, 200, 0.3);
-  flex-shrink: 0;
-  width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  flex: 1.8 1 0;
+  overflow: hidden;
 }
 
 .sectionHeader {
@@ -323,6 +311,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
+  flex-shrink: 0;
 }
 
 .sectionTitle {
@@ -354,10 +343,12 @@
   cursor: pointer;
   font-weight: 600;
   font-size: 12px;
+  flex-shrink: 0;
 }
 
 .progressContainer {
   margin-bottom: 14px;
+  flex-shrink: 0;
 }
 
 .progressBar {
@@ -382,11 +373,26 @@
   cursor: pointer;
 }
 
+/* Scrollable concept list — header/dropdown/progress bar stay pinned above it */
 .conceptGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 4px;
+}
+
+.conceptGrid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.conceptGrid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
 }
 
 .conceptCard {
@@ -450,22 +456,29 @@
   margin: 0;
 }
 
+/* Chart column */
 .chartSection {
   background: #1e2d5f;
   border-radius: 16px;
   padding: 20px;
   border: 1.5px solid rgba(100, 150, 200, 0.3);
-  flex-shrink: 0;
-  width: 100%;
   box-sizing: border-box;
-  margin-bottom: 70px;
+  display: flex;
+  flex-direction: column;
+  height: 50%;
+  align-self: flex-start;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
 .chartContainer {
   background: white;
   border-radius: 12px;
   padding: 16px;
-  height: 280px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* --- Modals --- */
@@ -597,22 +610,62 @@
   cursor: not-allowed;
 }
 
+/* Save button row — centered */
+.formActionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 4px;
+}
+
 .submitBtn {
   background: #22c55e;
   color: #0f1a2e;
   border: none;
-  padding: 11px 20px;
+  padding: 11px 32px;
   border-radius: 10px;
   font-weight: 900;
   cursor: pointer;
-  margin-top: 6px;
   font-size: 13px;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.submitBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 .submitBtn:disabled {
   opacity: 0.75;
   cursor: wait;
+}
+
+/* Floating "Saved" pop-out toast — fixed to the corner of the viewport,
+   independent of the modal, so it doesn't take up panel space. */
+.saveToast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #16a34a;
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 12px 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  z-index: 20000;
+  animation: saveToastIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.saveToast svg {
+  flex-shrink: 0;
+}
+
+@keyframes saveToastIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .saveStatus {
@@ -692,40 +745,58 @@
     width: 280px;
   }
 
-  .mainDashboard {
-    width: min(100%, 800px);
-  }
-
   .conceptGrid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media screen and (max-width: 1024px) {
+  /* Fall back to a stacked, scrollable layout on tablet/mobile */
   .mainWrapper {
     flex-wrap: wrap;
     justify-content: center;
     align-content: flex-start;
     height: auto;
+    overflow: visible;
     overflow-y: auto;
   }
 
   .sidebarProfile {
     width: 280px;
+    max-width: 280px;
     order: 1;
+    height: auto;
+    overflow: visible;
   }
 
   .mainDashboard {
     width: min(100%, 800px);
     order: 2;
+    flex-direction: column;
+    height: auto;
+  }
+
+  .accomplishmentsSection {
+    flex: none;
+    height: auto;
+    max-height: 500px;
   }
 
   .conceptGrid {
     grid-template-columns: 1fr;
+    overflow: visible;
+    flex: none;
   }
 
-  .accomplishmentsSection {
-    max-height: 500px;
+  .chartSection {
+    flex: none;
+    height: auto;
+    max-width: 100%;
+  }
+
+  .chartContainer {
+    height: 280px;
+    flex: none;
   }
 }
 
@@ -922,7 +993,7 @@
   border-bottom-color: #2d3f6f;
 }
 
-/* --- Profile Card --- */
+/* --- Profile Card (legacy / other views) --- */
 .card {
   background-color: var(--card-bg);
   width: 620px;
@@ -932,7 +1003,7 @@
   box-shadow: 0 5px 20px rgba(0,0,0,0.08);
   position: relative;
   max-height: 700px;
-  
+
   margin-bottom: 20px;
 }
 
@@ -1015,12 +1086,7 @@
   color: #e0e0e0;
 }
 
-/* --- Form Styling --- */
-.formGroup {
-  margin-bottom: 25px;
-  position: relative;
-}
-
+/* --- Form Styling (legacy) --- */
 .fieldLabel {
   color: var(--accent-yellow);
   display: block;
@@ -1072,7 +1138,7 @@
   box-shadow: none;
 }
 
-/* --- Toast --- */
+/* --- Legacy toast (kept in case referenced elsewhere; no longer used for save confirmation) --- */
 .toast {
   position: absolute;
   top: 50%;
@@ -1108,11 +1174,11 @@
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.0.8);
+    transform: translate(-50%, -50%) scale(0.8);
   }
 }
 
-/* --- Stats Sidebar & Mini Cards --- */
+/* --- Stats Sidebar & Mini Cards (legacy) --- */
 .statsSidebar {
   display: flex;
   flex-direction: column;
@@ -1156,12 +1222,12 @@
   flex-direction: column;
 }
 
-/* --- Performance Chart Styles --- */
+/* --- Performance Chart (legacy placeholder) --- */
 .chartPlaceholder {
   background: white;
   border-radius: 12px;
   padding: 15px;
-  height: 200px; 
+  height: 200px;
   width: 92%;
 }
 
@@ -1169,7 +1235,7 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-/* --- Accomplishments / Badge Grid --- */
+/* --- Accomplishments / Badge Grid (legacy) --- */
 .langSelect {
   width: 100%;
   background: #1e4baf;
@@ -1202,8 +1268,8 @@
   transition: transform 0.2s;
 }
 
-.badgeItem:hover { 
-  transform: scale(1.05); 
+.badgeItem:hover {
+  transform: scale(1.05);
 }
 
 .badgeItem span {
@@ -1232,44 +1298,13 @@
   border-color: white;
 }
 
-/* --- Progress Bar --- */
-.progressContainer {
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.progressBar {
-  width: 100%;
-  height: 10px;
-  background: #0d213b;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 5px;
-}
-
-.progressFill {
-  height: 100%;
-  background: linear-gradient(90deg, #4caf50, #8bc34a);
-  transition: width 0.4s ease;
-}
-
-.progressText {
-  color: var(--accent-yellow);
-  font-size: 12px;
-}
-
-/* --- Responsive Design --- */
+/* --- Responsive Design (legacy card view) --- */
 @media screen and (max-width: 1200px) {
-  .mainWrapper {
-    padding: 30px;
-    gap: 20px;
-  }
-  
   .card {
     width: 100%;
     max-width: 620px;
   }
-  
+
   .statsSidebar {
     width: 100%;
     max-width: 380px;
@@ -1277,66 +1312,62 @@
 }
 
 @media screen and (max-width: 900px) {
-  .mainWrapper {
-    flex-direction: column;
-  }
-  
   .card {
     width: 100%;
     max-width: 100%;
     margin-bottom: 40px;
   }
-  
+
   .statsSidebar {
     height: auto;
     width: 100%;
   }
-  
+
   .miniCard {
     flex: unset;
   }
-  
+
   .navbar {
     padding: 15px 20px;
   }
-  
+
   .logo {
     height: 40px;
   }
-  
+
   .navActions {
     gap: 15px;
   }
-  
+
   .nameBadge {
     padding: 4px 12px;
     font-size: 12px;
   }
-  
+
   .headerSection {
     flex-direction: column;
     gap: 20px;
   }
-  
+
   .infoLabels {
     align-items: center;
   }
-  
+
   .title {
     font-size: 24px;
   }
-  
+
   .fieldLabel {
     font-size: 16px;
   }
-  
+
   .saveBtn {
     padding: 10px 40px;
     font-size: 18px;
   }
 
   .accomplishList {
-    max-height: 200px; 
+    max-height: 200px;
   }
 }
 
@@ -1345,139 +1376,122 @@
     padding: 0;
     padding-bottom: 60px;
   }
-  
+
   .navbar {
     padding: 10px 15px;
     min-height: 60px;
   }
-  
+
   .logo {
     height: 35px;
   }
-  
+
   .navActions {
     gap: 10px;
   }
-  
+
   .nameBadge {
     display: none;
   }
-  
+
   .themeToggle {
     height: 35px;
   }
-  
+
   .profileIcon {
     width: 35px;
     height: 35px;
   }
-  
-  .mainWrapper {
-    padding: 20px 15px;
-    gap: 15px;
-  }
-  
+
   .card {
     padding: 25px 20px;
     min-height: auto;
   }
-  
+
   .title {
     font-size: 22px;
     margin-bottom: 20px;
   }
-  
+
   .headerSection {
     margin-bottom: 30px;
   }
-  
+
   .avatarCircleLarge {
     width: 80px;
     height: 80px;
   }
-  
+
   .infoLabels {
     gap: 10px;
   }
-  
+
   .labelYellow {
     font-size: 16px;
   }
-  
+
   .formGroup {
     margin-bottom: 20px;
   }
-  
+
   .fieldLabel {
     font-size: 16px;
   }
-  
+
   .inputField {
     padding: 10px 12px;
     font-size: 14px;
   }
-  
+
   .saveBtnWrapper {
     margin-top: 25px;
   }
-  
+
   .saveBtn {
     padding: 10px 30px;
     font-size: 16px;
   }
-  
+
   .statsSidebar {
     gap: 15px;
   }
-  
+
   .miniCard {
     padding: 15px;
   }
-  
+
   .miniTitle {
     font-size: 16px;
     margin-bottom: 12px;
   }
-  
+
   .chartPlaceholder {
     padding: 10px;
     min-height: 150px;
   }
-  
+
   .langSelect {
     padding: 6px;
     font-size: 12px;
   }
-  
-  .progressContainer {
-    margin-bottom: 15px;
-  }
-  
-  .progressBar {
-    height: 8px;
-  }
-  
-  .progressText {
-    font-size: 11px;
-  }
-  
+
   .badgeGrid {
     grid-template-columns: 1fr;
     gap: 10px;
   }
-  
+
   .badgeItem {
     padding: 6px;
   }
-  
+
   .badgeItem span {
     font-size: 11px;
   }
-  
+
   .checkCircle {
     height: 20px;
   }
-  
+
   .toast {
     padding: 12px 20px;
     font-size: 14px;
@@ -1489,57 +1503,51 @@
   .navbar {
     padding: 10px;
   }
-  
+
   .logo {
     height: 30px;
   }
-  
+
   .themeToggle {
     font-size: 20px;
   }
-  
+
   .profileIcon {
     width: 30px;
     height: 30px;
   }
-  
-  .mainWrapper {
-    padding: 15px 10px;
-  }
-  
+
   .card {
     padding: 20px 15px;
   }
-  
+
   .title {
     font-size: 20px;
   }
-  
+
   .avatarCircleLarge {
     width: 70px;
     height: 70px;
   }
-  
+
   .miniCard {
     padding: 12px;
   }
-  
+
   .miniTitle {
     font-size: 14px;
   }
 }
 
-/* new */
-
+/* --- Accomplish List (legacy) --- */
 .accomplishList {
   max-height: 195px;
   overflow-y: auto;
   min-height: 0;
   padding-right: 8px;
-  margin-top: 10px; 
+  margin-top: 10px;
 }
 
-/* Scrollbar styling (optional but nice) */
 .accomplishList::-webkit-scrollbar {
   width: 6px;
 }
@@ -1583,54 +1591,41 @@
   font-weight: normal !important;
 }
 
-.progressText {
-  color: var(--accent-yellow);
-  font-size: 12px;
-  font-weight: bold;
-}
-
-
-/* Mobile First Improvements */
+/* Mobile First Improvements (legacy card view) */
 @media (max-width: 768px) {
-  .mainWrapper {
-    flex-direction: column !important;
-    padding: 20px 16px !important;
-    gap: 20px !important;
-  }
-  
   .card {
     width: 100% !important;
     max-width: 100% !important;
     padding: 24px 20px !important;
     margin-bottom: 0 !important;
   }
-  
+
   .statsSidebar {
     width: 100% !important;
     order: -1; /* Stats first on mobile */
   }
-  
+
   .headerSection {
     flex-direction: column !important;
     gap: 20px !important;
     text-align: center;
   }
-  
+
   .avatarCircleLarge {
     width: 90px !important;
     height: 90px !important;
     order: -1;
   }
-  
+
   .infoLabels {
     order: 1;
     align-items: center !important;
   }
-  
+
   .accomplishList {
     max-height: 250px !important;
   }
-  
+
   .chartPlaceholder {
     height: 180px !important;
   }
@@ -1641,18 +1636,18 @@
     padding: 12px 16px !important;
     flex-wrap: wrap;
   }
-  
+
   .navActions {
     flex-direction: column;
     gap: 8px;
   }
-  
+
   .miniCard {
     padding: 16px !important;
   }
 }
 
-/* Compact Analysis Card - Add to end of CSS */
+/* Compact Analysis Card (legacy) */
 .compactAnalysis {
   position: fixed;
   top: 50%;
@@ -1696,18 +1691,6 @@
   font-weight: 600;
 }
 
-/* Main Card */
-.analysisCard {
-  background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
-  border-radius: 20px;
-  padding: 25px;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.6);
-  border: 1px solid rgba(255,255,255,0.1);
-  max-height: 80vh;
-  overflow-y: auto;
-  backdrop-filter: blur(15px);
-}
-
 .cardHeader {
   display: flex;
   justify-content: space-between;
@@ -1741,7 +1724,6 @@
   justify-content: center;
 }
 
-/* Achievement Summary */
 .achievementSummary {
   text-align: center;
   padding: 20px 0;
@@ -1779,7 +1761,6 @@
   font-weight: 700;
 }
 
-/* Graph Insight */
 .graphInsight {
   background: rgba(59,130,246,0.15);
   padding: 20px;
@@ -1805,7 +1786,6 @@
   font-weight: 500;
 }
 
-/* Language Quick Status */
 .langQuick {
   margin-bottom: 20px;
 }
@@ -1845,7 +1825,6 @@
   display: block;
 }
 
-/* Next Steps */
 .nextSteps {
   background: rgba(16,185,129,0.2);
   padding: 20px;
@@ -1876,7 +1855,6 @@
   border-radius: 8px;
 }
 
-/* Continue Button */
 .continueBtn {
   width: 100%;
   padding: 14px 24px;
@@ -1895,7 +1873,6 @@
   box-shadow: 0 8px 25px rgba(16,185,129,0.4);
 }
 
-/* Mini Animations */
 @keyframes miniPulse0 {
   0%, 100% { height: 30px; opacity: 1; }
   50% { height: 8px; opacity: 0.4; }
@@ -1923,17 +1900,4 @@
   font-size: 16px;
   font-weight: 900;
   color: #f8fafc;
-}
-
-/* LEVEL BADGE */
-.levelBadge {
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 800;
-  background: rgba(59,130,246,0.2);
-  color: #60a5fa;
-  border: 1px solid rgba(59,130,246,0.4);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
