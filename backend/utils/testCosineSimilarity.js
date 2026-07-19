@@ -1,23 +1,3 @@
-/**
- * utils/testCosineSimilarity.js
- * ─────────────────────────────────────────────────────────────────
- * CodApt — Cosine Similarity Recommendation Test Suite
- *
- * Tests the content-based recommendation algorithm against
- * labeled test cases showing what exercise SHOULD be recommended
- * for each learner profile.
- *
- * What this script produces:
- *   ✔ Overall recommendation accuracy
- *   ✔ Per-feature matching analysis
- *   ✔ Similarity score distribution
- *   ✔ Edge case detection
- *
- * Usage:
- *   node utils/testCosineSimilarity.js
- *
- * ─────────────────────────────────────────────────────────────────
- */
 
 'use strict';
 

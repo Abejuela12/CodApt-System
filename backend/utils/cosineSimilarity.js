@@ -1,34 +1,4 @@
-// utils/cosineSimilarity.js
-// ═══════════════════════════════════════════════════════════════════
-//  CodApt — Weighted Content-Based Cosine Similarity
-//
-//  Manuscript formula (Table 4):
-//
-//    Sim(L, E) = Σ (w_i × L_i × E_i)
-//               ──────────────────────────────────────────
-//               √Σ(w_i × L_i²)  ×  √Σ(w_i × E_i²)
-//
-//  Feature weights (must sum to 1.0):
-//    topic (language)          → 0.40
-//    difficulty                → 0.30
-//    required_construct        → 0.20
-//    concept                   → 0.10
-//
-//  BUG FIX:
-//    The original code used `problem.language` for the topic field
-//    when building the learner vector, but mapped the exercise's
-//    `topic` field to `problem.language` too — which is correct IF
-//    the DB column is called `language`.  We now explicitly label
-//    both sides as `language` to avoid any field-name confusion.
-//
-//    The formula implementation was also subtly wrong: it computed
-//    A_i = featureSim(learner, exercise) for both numerator AND
-//    denominator of the learner norm, while the denominator of the
-//    exercise norm used B_i = 1.  This means the denominator of
-//    the learner norm was √Σ(w_i × sim²) instead of √Σ(w_i × L_i²).
-//    The fix below keeps separate learner and exercise component
-//    arrays so each norm is computed correctly.
-// ═══════════════════════════════════════════════════════════════════
+
 
 // ─── Feature weights ─────────────────────────────────────────────
 const WEIGHTS = {
@@ -63,14 +33,7 @@ function difficultySim(a, b) {
 }
 
 // ─── Feature vectors ─────────────────────────────────────────────
-/**
- * Build the learner feature vector from the current problem context
- * and the learner's performance profile row.
- *
- * BUG FIX: the `language` field on `learnerProfile` (from user_profiles)
- * is called `language`, not `topic`.  We source it from `currentProblem`
- * since user_profiles already stores it per-language.
- */
+
 function buildLearnerVector(learnerProfile, currentProblem) {
   return {
     language:           currentProblem.language                         || '',
@@ -105,25 +68,7 @@ function featureSim(feature, learnerVal, exerciseVal) {
 }
 
 // ─── Weighted cosine similarity (corrected) ───────────────────────
-/**
- * BUG FIX: In the original implementation both norms used the
- * same similarity value, which is only correct for the dot product,
- * not for the individual vector magnitudes.
- *
- * The manuscript formula treats each feature as having:
- *   L_i = 1 if the learner "has" this feature, 0 otherwise
- *   E_i = 1 if the exercise "has" this feature, 0 otherwise
- *
- * Since we encode categorical features as binary match scores,
- * L_i = E_i = featureSim(learner, exercise) is the right encoding
- * for the numerator (dot product of matching components).
- * For the magnitudes we use the same encoding — the formula
- * simplifies correctly to a weighted sum of similarities because
- * all component vectors have unit length after weighting.
- *
- * The implementation below is explicit and matches the pseudocode
- * in Algorithm 1 of the manuscript exactly.
- */
+
 function cosineSimilarity(learnerVec, exerciseVec) {
   const features = Object.keys(WEIGHTS);
 

@@ -1,26 +1,3 @@
-/**
- * utils/trainCart.js
- * ─────────────────────────────────────────────────────────────────
- * Standalone training script.
- *
- * Run once (or on a schedule) to re-train the CART from your
- * submissions database and write cart_model.json.
- *
- * Usage:
- *   node utils/trainCart.js
- *
- * What it does:
- *   1. Queries user_profiles for all rows that have a ground-truth
- *      performance_level (from previously approved labels or expert
- *      annotation).
- *   2. Falls back to generating synthetic bootstrap labels from the
- *      raw feature values when the table has fewer than MIN_ROWS rows
- *      — this ensures the server always has a model to load.
- *   3. Splits data 80/20 train/test, trains the CART, evaluates it,
- *      prints the learned tree, then saves cart_model.json.
- *
- * Output file: utils/cart_model.json  (loaded by server.js at startup)
- */
 
 'use strict';
 
@@ -33,11 +10,7 @@ const { CARTClassifier } = require('./cartModel');
 // Below this we generate a synthetic seed dataset instead.
 const MIN_ROWS = 10;
 
-// ─── Synthetic seed dataset ───────────────────────────────────────
-// These are realistic representative samples that encode the same
-// decision logic as the previous hardcoded rules, but expressed as
-// labeled examples rather than explicit thresholds.
-// Once real data accumulates the tree will override these patterns.
+
 const SEED_DATA = [
   // ── Easy (struggling learners) ────────────────────────────────
   { success_rate: 0.0,  avg_attempts: 6, avg_time_spent: 180, syntax_errors: 5, structural_errors: 4, label: 'Easy' },

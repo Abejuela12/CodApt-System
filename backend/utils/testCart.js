@@ -453,7 +453,7 @@ if (accuracy >= 0.95) {
   console.log(' ✅ EXCELLENT — Model is highly accurate on unseen data.');
   console.log('    Your CART is generalising well and is ready for production.');
 } else if (accuracy >= 0.85) {
-  console.log(' ✅ GOOD — Model performs well. Acceptable for thesis use.');
+  console.log(' ✅ GOOD — Model performs well.');
   console.log('    Consider retraining with real respondent data to improve further.');
 } else if (accuracy >= 0.70) {
   console.log(' ⚠  ACCEPTABLE — Model is functional but has room to improve.');

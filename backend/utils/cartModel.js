@@ -1,35 +1,4 @@
-/**
- * utils/cartModel.js
- * ─────────────────────────────────────────────────────────────────
- * Pure-JavaScript CART (Classification and Regression Tree)
- *
- * Implements the standard CART algorithm:
- *   - Split criterion : Gini impurity (same as scikit-learn default)
- *   - Stopping rules  : max_depth, min_samples_split, min_samples_leaf
- *   - Prediction      : majority-class vote at each leaf
- *
- * No external dependencies — runs directly in Node.js.
- *
- * Public API
- * ──────────
- *   const cart = new CARTClassifier({ max_depth, min_samples_split, min_samples_leaf });
- *   cart.fit(X, y);               // X = array of feature objects, y = array of labels
- *   cart.predict(features);       // returns predicted label string
- *   cart.exportTree();            // returns serialisable plain object (save as JSON)
- *   cart.importTree(obj);         // restore a previously exported tree
- *   cart.printTree();             // human-readable text dump for logging
- *
- * Feature vector shape (matches user_profiles columns):
- *   {
- *     success_rate:      number   // 0–1  (fraction correct)
- *     avg_attempts:      number   // ≥1
- *     avg_time_spent:    number   // seconds
- *     syntax_errors:     number   // cumulative count
- *     structural_errors: number   // cumulative count
- *   }
- *
- * Labels: 'Easy' | 'Intermediate' | 'Hard'
- */
+
 
 'use strict';
 

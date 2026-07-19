@@ -1,29 +1,4 @@
-/**
- * utils/cfgValidator.js
- * ─────────────────────────────────────────────────────────────────
- * Rule-Based Simplified Context-Free Grammar (CFG) Validator
- *
- * What it does:
- *   1. Checks that the required programming construct is actually
- *      present in active code (not in comments or strings).
- *   2. Detects hardcoded output — answer printed literally instead
- *      of computed.
- *   3. Counts syntax errors via lightweight language-aware heuristics.
- *   4. Counts structural errors (missing construct, hardcoding).
- *
- * BUG FIXES vs original:
- *   - Python `while` pattern was wrong: `while\s*\(` never matches
- *     Python style `while condition:`.  Fixed to try both forms.
- *   - Hardcoded detection fired on multi-word / numeric outputs
- *     that appeared inside variable assignment lines, not just print
- *     calls.  The regex anchoring is now tighter.
- *   - Java syntax check emitted false-positive "missing semicolon"
- *     on annotation lines (@Override, @Test, etc.).
- *   - Syntax check now skips blank lines and import statements.
- *
- * Returns:
- *   { syntaxErrors, structuralErrors, feedback, constructUsed }
- */
+
 
 // ─── helpers ────────────────────────────────────────────────────
 

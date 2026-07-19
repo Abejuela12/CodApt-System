@@ -1,45 +1,4 @@
-/**
- * generateSyntheticData.js
- * ─────────────────────────────────────────────────────────────────
- * CodApt — Synthetic CART Training Data Generator
- *
- * PURPOSE
- *   Your trainCart.js currently trains on 36 hand-written SEED_DATA
- *   rows. For a thesis defense, that's too small to claim reliable
- *   accuracy. This script generates a much larger, realistic dataset
- *   (default: 900 rows, 300 per class) that:
- *
- *     1. Respects the SAME class boundaries your tree already learned
- *        (success_rate ≤ 0.475 → Easy, ≤ 0.79 → Intermediate, else Hard)
- *     2. Correlates the OTHER features (attempts, time, errors) with
- *        success_rate the way real learners behave — struggling
- *        learners take longer, retry more, and make more errors.
- *     3. Adds Gaussian noise + occasional outliers so the dataset
- *        isn't trivially separable (a model trained on it will show
- *        realistic, defensible accuracy instead of a suspicious 100%).
- *
- * IMPORTANT — BE TRANSPARENT ABOUT THIS IN YOUR PAPER
- *   This is SYNTHETIC / BOOTSTRAPPED data, not real student data.
- *   State that clearly in your methodology (e.g., "N synthetic samples
- *   generated to augment M real submissions, using distributions
- *   informed by pilot data and instructor-defined performance bands").
- *   Mixing in as many REAL rows from user_profiles as you can get is
- *   always better than pure synthetic data — this script supports that
- *   (see MERGE_REAL_DATA_PATH below).
- *
- * USAGE
- *   node generateSyntheticData.js                # 900 rows (300/class)
- *   node generateSyntheticData.js 1000           # 1000 rows total
- *   node generateSyntheticData.js 1000 0.05      # + 5% outlier rate
- *
- * OUTPUT (written next to this script)
- *   synthetic_cart_data.json   → drop-in array for trainCart.js
- *   synthetic_cart_data.csv    → for Excel / MATLAB / SPSS import
- *   synthetic_cart_train.csv   → 80% stratified split (train)
- *   synthetic_cart_test.csv    → 20% stratified split (held-out test)
- *   summary printed to console → paste into your methodology section
- * ─────────────────────────────────────────────────────────────────
- */
+
 
 'use strict';
 
