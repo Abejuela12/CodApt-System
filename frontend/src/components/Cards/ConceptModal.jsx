@@ -177,13 +177,16 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
               ref={swiperRef}
               modules={[Navigation, Pagination, EffectCoverflow]}
               effect="coverflow"
-              grabCursor={true}
+              grabCursor={false}
+              allowTouchMove={false}
+              simulateTouch={false}
               centeredSlides={true}
               slidesPerView="auto"
+              initialSlide={activeIndex}
               coverflowEffect={{
                 rotate: 0,
                 stretch: 0,
-                depth: 100,
+                depth: 110,
                 modifier: 2.5,
                 slideShadows: true
               }}
@@ -194,10 +197,18 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
               {filteredConcepts.map((item, index) => {
                 const mastered = isMasteredConcept(progress, language, item.name);
                 return (
-                  <SwiperSlide key={item.name} className={styles.swiperSlide}>
+                  <SwiperSlide
+                    key={item.name}
+                    className={styles.swiperSlide}
+                  >
                     <div
                       className={styles.conceptCard}
-                      onClick={() => handleConceptClick(index)}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        swiperRef.current?.swiper.slideTo(index);
+                        handleConceptClick(index);
+                      }}
                       style={mastered
                         ? {
                             borderColor: '#facc15',
