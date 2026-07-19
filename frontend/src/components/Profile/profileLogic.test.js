@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calcMasteryProgress, buildOverallStats, getLanguageCapability } from './profileLogic.js';
+import { calcMasteryProgress, buildOverallStats, getLanguageCapability, buildPerformanceChartData } from './profileLogic.js';
 
 function run() {
   const progress = {
@@ -27,6 +27,28 @@ function run() {
 
   const capability = getLanguageCapability('Python', progress);
   assert.equal(capability.label, 'Intermediate', 'Python should be Intermediate for this sample');
+
+  const fromDailyRows = buildPerformanceChartData([
+    { progress_date: '2026-07-19', language: 'Java', score: 80 },
+    { progress_date: '2026-07-20', language: 'Python', score: 60 }
+  ], {});
+  assert.equal(fromDailyRows.chartData.length, 2, 'Daily-row chart data should preserve the rows');
+  assert.deepEqual(fromDailyRows.activeChartLangs, ['Java', 'Python'], 'Daily rows should register both languages');
+
+  const fallback = buildPerformanceChartData([], {
+    Java: {
+      Variables: { tasksCompleted: 3, totalTasks: 3, successRate: 90 }
+    },
+    Python: {
+      Loops: { tasksCompleted: 1, totalTasks: 3, successRate: 70 }
+    }
+  });
+  assert.equal(fallback.chartData.length, 4, 'Fallback chart data should create a multi-step progression for the user');
+  assert.deepEqual(fallback.activeChartLangs, ['Java', 'Python'], 'Fallback chart data should include both languages');
+  assert.equal(fallback.chartData[0].java, 0, 'Fallback chart should start from zero for Java');
+  assert.equal(fallback.chartData[3].java, 90, 'Fallback Java score should come from progress data');
+  assert.equal(fallback.chartData[3].python, 70, 'Fallback Python score should come from progress data');
+  assert.ok(fallback.chartData[3].java > fallback.chartData[1].java, 'Fallback chart should show a rising progression');
 
   console.log('PASS profileLogic unit tests');
 }

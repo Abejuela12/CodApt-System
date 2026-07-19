@@ -25,6 +25,58 @@ function calcMasteryProgress(language, progress = {}, concepts = DEFAULT_CONCEPT
   return { masteredConcepts, totalConcepts: concepts.length, percentage: Math.round(avgSuccess), avgSuccess };
 }
 
+function buildPerformanceChartData(rows = [], progress = {}) {
+  if (Array.isArray(rows) && rows.length > 0) {
+    const byDate = {};
+    const langsInDB = new Set();
+
+    rows.forEach(row => {
+      const date = new Date(row.progress_date);
+      const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (!byDate[label]) byDate[label] = { name: label };
+      const langKey = row.language?.toLowerCase();
+      byDate[label][langKey] = row.score ?? 0;
+      if (row.language) langsInDB.add(row.language);
+    });
+
+    const chartData = Object.values(byDate)
+      .sort((a, b) => new Date(a.name) - new Date(b.name))
+      .slice(-7);
+
+    return { chartData, activeChartLangs: [...langsInDB] };
+  }
+
+  const langsInProgress = Object.keys(progress || {}).filter(Boolean);
+
+  if (langsInProgress.length === 0) {
+    return { chartData: [], activeChartLangs: [] };
+  }
+
+  const fallbackData = [
+    { name: 'Start', java: 0, python: 0, javascript: 0 },
+    { name: 'Warmup', java: 0, python: 0, javascript: 0 },
+    { name: 'Practice', java: 0, python: 0, javascript: 0 },
+    { name: 'Current', java: 0, python: 0, javascript: 0 }
+  ];
+
+  langsInProgress.forEach(lang => {
+    const langProgress = progress[lang] || {};
+    const concepts = Object.values(langProgress || {});
+
+    const avgSuccess = concepts.length > 0
+      ? Math.round(concepts.reduce((sum, data) => sum + (data.successRate ?? 0), 0) / concepts.length)
+      : 0;
+
+    const langKey = lang.toLowerCase();
+    fallbackData[0][langKey] = 0;
+    fallbackData[1][langKey] = Math.max(0, Math.round(avgSuccess * 0.35));
+    fallbackData[2][langKey] = Math.max(0, Math.round(avgSuccess * 0.7));
+    fallbackData[3][langKey] = avgSuccess;
+  });
+
+  return { chartData: fallbackData, activeChartLangs: langsInProgress };
+}
+
 function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concepts = DEFAULT_CONCEPTS) {
   let totalMastered = 0;
   let successSum = 0;
@@ -67,4 +119,4 @@ function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concept
   return { totalMastered, avgSuccess, rank, langStats, rec, actions, interp };
 }
 
-export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats };
+export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData };

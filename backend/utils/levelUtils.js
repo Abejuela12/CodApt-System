@@ -1,9 +1,9 @@
 // utils/levelUtils.js
 
 export const BADGES = {
-  Java: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loop', 'Functions', 'Input & Output', 'Error Handling'],
-  Python: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loop', 'Functions', 'Input & Output', 'Error Handling'],
-  JavaScript: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loop', 'Functions', 'Input & Output', 'Error Handling']
+  Java: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loops', 'Functions', 'Input & Output', 'Error Handling'],
+  Python: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loops', 'Functions', 'Input & Output', 'Error Handling'],
+  JavaScript: ['Variables', 'Data Types', 'Operators', 'Conditional', 'Loops', 'Functions', 'Input & Output', 'Error Handling']
 };
 
 

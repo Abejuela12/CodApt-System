@@ -82,6 +82,8 @@ const SEED_DATA = [
   { success_rate: 0.97, avg_attempts: 1, avg_time_spent: 38,  syntax_errors: 0, structural_errors: 0, label: 'Hard' },
 ];
 
+const syntheticData = require('./synthetic_cart_data.json');
+
 // ─── Shuffle helper ───────────────────────────────────────────────
 function shuffle(arr) {
   const a = [...arr];
@@ -120,11 +122,11 @@ async function main() {
   // 2. Fall back to seed data if not enough real rows
   if (rows.length < MIN_ROWS) {
     console.log(`ℹ Not enough DB rows (${rows.length} < ${MIN_ROWS}). Using synthetic seed data.`);
-    rows = SEED_DATA;
+    rows = syntheticData ;
   } else {
     // Merge seed data as a minority-class anchor (prevents overfitting to current distribution)
     console.log(`✔ Merging ${SEED_DATA.length} seed samples with ${rows.length} real samples.`);
-    rows = [...rows, ...SEED_DATA];
+    rows = [...rows, ...syntheticData];
   }
 
   console.log(`📊 Total training samples: ${rows.length}`);

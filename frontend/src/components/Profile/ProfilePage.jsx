@@ -6,7 +6,7 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { getConceptLevel } from '../../utils/levelUtils';
-import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats } from './profileLogic';
+import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData } from './profileLogic';
 
 const LANGUAGES = DEFAULT_LANGUAGES;
 const CONCEPTS  = DEFAULT_CONCEPTS;
@@ -30,45 +30,41 @@ const ProfilePage = ({
   const [isSaving, setIsSaving]          = useState(false);
   const [saveError, setSaveError]        = useState('');
 
-  const fetchProgress = useCallback(async () => {
+  const loadProfileData = useCallback(async () => {
     if (!userData?.id) return;
+
+    setLoadingData(true);
+
     try {
-      const res  = await fetch(`${API}/api/progress/${userData.id}`);
-      const data = await res.json();
-      setProgress(data);
-    } catch {}
-  }, [userData?.id]);
+      const [progressResult, dailyResult] = await Promise.allSettled([
+        fetch(`${API}/api/progress/${userData.id}`),
+        fetch(`${API}/api/daily-progress/${userData.id}`)
+      ]);
 
-  const fetchDailyProgress = useCallback(async () => {
-    if (!userData?.id) return;
-    try {
-      const res  = await fetch(`${API}/api/daily-progress/${userData.id}`);
-      const rows = await res.json();
-      if (!Array.isArray(rows) || rows.length === 0) { setChartData([]); setActiveChartLangs([]); return; }
+      const progressData = progressResult.status === 'fulfilled'
+        ? await progressResult.value.json()
+        : {};
+      const rows = dailyResult.status === 'fulfilled'
+        ? await dailyResult.value.json()
+        : [];
 
-      const byDate     = {};
-      const langsInDB  = new Set();
-      rows.forEach(r => {
-        const label   = new Date(r.progress_date).toLocaleDateString('en-US', { month:'short', day:'numeric' });
-        if (!byDate[label]) byDate[label] = { name: label };
-        const langKey = r.language?.toLowerCase();
-        byDate[label][langKey] = r.score ?? 0;
-        if (r.language) langsInDB.add(r.language);
-      });
+      setProgress(progressData || {});
 
-      const sorted = Object.values(byDate)
-        .sort((a, b) => new Date(a.name) - new Date(b.name))
-        .slice(-7);
-
-      setChartData(sorted);
-      setActiveChartLangs([...langsInDB]);
-    } catch { setChartData([]); setActiveChartLangs([]); }
+      const fallback = buildPerformanceChartData(rows, progressData || {});
+      setChartData(fallback.chartData);
+      setActiveChartLangs(fallback.activeChartLangs);
+    } catch {
+      const fallback = buildPerformanceChartData([], {});
+      setChartData(fallback.chartData);
+      setActiveChartLangs(fallback.activeChartLangs);
+    } finally {
+      setLoadingData(false);
+    }
   }, [userData?.id]);
 
   useEffect(() => {
-    setLoadingData(true);
-    fetchProgress().then(() => fetchDailyProgress()).finally(() => setLoadingData(false));
-  }, [userData?.id]);
+    loadProfileData();
+  }, [loadProfileData]);
 
   useEffect(() => { if (Object.keys(propProgress).length > 0) setProgress(propProgress); }, [propProgress]);
   useEffect(() => { if (!showToast) return; const t = setTimeout(() => setShowToast(false), 3000); return () => clearTimeout(t); }, [showToast]);
@@ -258,7 +254,7 @@ const ProfilePage = ({
                   Complete tasks to see your performance chart.
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height={260}>
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
                     <XAxis dataKey="name" tick={{ fontSize:11, fill:'#94a3b8' }} />

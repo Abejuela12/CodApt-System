@@ -10,43 +10,215 @@
       "syntax_errors",
       "structural_errors"
     ],
-    "trained_at": "2026-06-24T14:41:30.707Z"
+    "trained_at": "2026-07-06T03:18:09.741Z"
   },
   "tree": {
     "leaf": false,
     "feature": "success_rate",
-    "threshold": 0.79,
-    "gini": 0.32432432432432434,
-    "samples": 37,
+    "threshold": 0.7865,
+    "gini": 0.34313095372958463,
+    "samples": 731,
     "left": {
       "leaf": false,
       "feature": "success_rate",
-      "threshold": 0.480769230769231,
-      "gini": 0,
-      "samples": 24,
+      "threshold": 0.4678333333333335,
+      "gini": 0.03686295997968929,
+      "samples": 479,
       "left": {
-        "leaf": true,
-        "label": "Easy",
-        "samples": 12,
-        "distribution": {
-          "Easy": 12
+        "leaf": false,
+        "feature": "success_rate",
+        "threshold": 0.4605,
+        "gini": 0.015515334338863766,
+        "samples": 225,
+        "left": {
+          "leaf": false,
+          "feature": "success_rate",
+          "threshold": 0.4375,
+          "gini": 0.00835363731291332,
+          "samples": 221,
+          "left": {
+            "leaf": true,
+            "label": "Easy",
+            "samples": 208,
+            "distribution": {
+              "Easy": 208
+            }
+          },
+          "right": {
+            "leaf": false,
+            "feature": "success_rate",
+            "threshold": 0.439,
+            "gini": 0.07692307692307693,
+            "samples": 13,
+            "left": {
+              "leaf": true,
+              "label": "Intermediate",
+              "samples": 2,
+              "distribution": {
+                "Intermediate": 1,
+                "Easy": 1
+              }
+            },
+            "right": {
+              "leaf": true,
+              "label": "Easy",
+              "samples": 11,
+              "distribution": {
+                "Easy": 11
+              }
+            }
+          }
+        },
+        "right": {
+          "leaf": true,
+          "label": "Easy",
+          "samples": 4,
+          "distribution": {
+            "Easy": 3,
+            "Intermediate": 1
+          }
         }
       },
       "right": {
-        "leaf": true,
-        "label": "Intermediate",
-        "samples": 12,
-        "distribution": {
-          "Intermediate": 12
+        "leaf": false,
+        "feature": "success_rate",
+        "threshold": 0.4945,
+        "gini": 0.0464230508735816,
+        "samples": 254,
+        "left": {
+          "leaf": false,
+          "feature": "avg_attempts",
+          "threshold": 2.94,
+          "gini": 0.22082379862700224,
+          "samples": 23,
+          "left": {
+            "leaf": false,
+            "feature": "success_rate",
+            "threshold": 0.486,
+            "gini": 0.25,
+            "samples": 4,
+            "left": {
+              "leaf": true,
+              "label": "Easy",
+              "samples": 2,
+              "distribution": {
+                "Easy": 2
+              }
+            },
+            "right": {
+              "leaf": true,
+              "label": "Intermediate",
+              "samples": 2,
+              "distribution": {
+                "Intermediate": 1,
+                "Easy": 1
+              }
+            }
+          },
+          "right": {
+            "leaf": true,
+            "label": "Intermediate",
+            "samples": 19,
+            "distribution": {
+              "Intermediate": 17,
+              "Easy": 2
+            }
+          }
+        },
+        "right": {
+          "leaf": false,
+          "feature": "success_rate",
+          "threshold": 0.7845,
+          "gini": 0.014392040707830168,
+          "samples": 231,
+          "left": {
+            "leaf": false,
+            "feature": "success_rate",
+            "threshold": 0.7715000000000001,
+            "gini": 0.00797448165869219,
+            "samples": 228,
+            "left": {
+              "leaf": true,
+              "label": "Intermediate",
+              "samples": 217,
+              "distribution": {
+                "Intermediate": 217
+              }
+            },
+            "right": {
+              "leaf": true,
+              "label": "Intermediate",
+              "samples": 11,
+              "distribution": {
+                "Intermediate": 10,
+                "Hard": 1
+              }
+            }
+          },
+          "right": {
+            "leaf": true,
+            "label": "Intermediate",
+            "samples": 3,
+            "distribution": {
+              "Intermediate": 2,
+              "Hard": 1
+            }
+          }
         }
       }
     },
     "right": {
-      "leaf": true,
-      "label": "Hard",
-      "samples": 13,
-      "distribution": {
-        "Hard": 13
+      "leaf": false,
+      "feature": "success_rate",
+      "threshold": 0.7985,
+      "gini": 0.02906746031746034,
+      "samples": 252,
+      "left": {
+        "leaf": false,
+        "feature": "syntax_errors",
+        "threshold": 0.5,
+        "gini": 0,
+        "samples": 12,
+        "left": {
+          "leaf": true,
+          "label": "Intermediate",
+          "samples": 4,
+          "distribution": {
+            "Intermediate": 4
+          }
+        },
+        "right": {
+          "leaf": true,
+          "label": "Hard",
+          "samples": 8,
+          "distribution": {
+            "Hard": 8
+          }
+        }
+      },
+      "right": {
+        "leaf": false,
+        "feature": "success_rate",
+        "threshold": 0.803,
+        "gini": 0.007142857142857145,
+        "samples": 240,
+        "left": {
+          "leaf": true,
+          "label": "Hard",
+          "samples": 7,
+          "distribution": {
+            "Hard": 6,
+            "Intermediate": 1
+          }
+        },
+        "right": {
+          "leaf": true,
+          "label": "Hard",
+          "samples": 233,
+          "distribution": {
+            "Hard": 233
+          }
+        }
       }
     }
   }

@@ -1414,13 +1414,14 @@ app.get('/api/daily-progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // SUPABASE (pg): DATE_SUB(CURDATE(), INTERVAL 14 DAY) →
-    //                CURRENT_DATE - INTERVAL '14 days'
+    // Return a broader history window so the profile chart reflects the
+    // learner's progression over time instead of dropping to a fallback
+    // two-point line when older entries are outside a short window.
     const { rows } = await db.query(
       `SELECT progress_date, language, score
        FROM daily_progress
        WHERE user_id = $1
-         AND progress_date >= CURRENT_DATE - INTERVAL '14 days'
+         AND progress_date >= CURRENT_DATE - INTERVAL '365 days'
        ORDER BY progress_date ASC, language ASC`,
       [userId]
     );
