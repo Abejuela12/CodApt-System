@@ -333,6 +333,40 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
   }
 });
 
+app.delete('/api/auth/delete-account/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'User ID is required.' });
+    }
+
+    console.log(`🗑️  Deleting account for user ${userId}...`);
+
+    // Delete user_profiles first (child table)
+    try {
+      const profileResult = await db.query('DELETE FROM user_profiles WHERE user_id = $1', [userId]);
+      console.log(`  → Deleted ${profileResult.rowCount || 0} profile rows`);
+    } catch (profileErr) {
+      console.warn(`  ⚠️  Error deleting profiles: ${profileErr.message}`);
+      // Continue anyway; profiles might not exist
+    }
+
+    // Delete user account
+    const userResult = await db.query('DELETE FROM users WHERE id = $1', [userId]);
+    
+    if (!userResult || userResult.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Account not found.' });
+    }
+
+    console.log(`✅ Account deleted for user ${userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ DELETE ACCOUNT:', err.message, err.stack);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /* ══════════════════════════════════════
    API — GET PROBLEMS
 ══════════════════════════════════════ */

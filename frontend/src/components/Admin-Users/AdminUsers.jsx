@@ -274,9 +274,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
               <button className={styles.resetPasswordBtn} onClick={() => openActionModal(selectedUser, 'reset')}>
                 🔑 Reset Password
               </button>
-              <button className={styles.deleteUserBtn} onClick={() => openActionModal(selectedUser, 'delete')}>
-                🗑️ Delete User
-              </button>
             </div>
           </div>
         </div>

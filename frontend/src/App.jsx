@@ -105,6 +105,33 @@ function App() {
     goToLanding();
   };
 
+  const handleDeleteAccount = async () => {
+    if (!userData?.id) throw new Error('User ID not found.');
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/delete-account/${userData.id}`, {
+        method: 'DELETE'
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error('Failed to parse response:', res.status, res.statusText);
+        throw new Error(`Server error: ${res.status} ${res.statusText}`);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Unable to delete account.');
+      }
+    } catch (err) {
+      console.error('Delete account failed:', err);
+      throw err;
+    }
+
+    handleLogout();
+  };
+
   const goToAdmin         = () => navigate('/admin');
   const goToLanding       = () => navigate('/');
   const goToSignUp        = () => navigate('/signup');
@@ -158,7 +185,7 @@ function App() {
     />
   );
   if (currentPage === 'profile') return (
-    <ProfilePage userData={userData} onSave={handleSaveProfile}
+    <ProfilePage userData={userData} onSave={handleSaveProfile} onDeleteAccount={handleDeleteAccount}
       isDarkMode={isDarkMode} toggleTheme={toggleTheme}
       onHomeClick={goToLanguages} onLogout={handleLogout} progress={progress} />
   );

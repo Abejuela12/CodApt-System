@@ -13,7 +13,7 @@ const CONCEPTS  = DEFAULT_CONCEPTS;
 const API       = 'http://localhost:5000';
 
 const ProfilePage = ({
-  userData, onSave, isDarkMode, toggleTheme,
+  userData, onSave, onDeleteAccount, isDarkMode, toggleTheme,
   onHomeClick, onLogout, progress: propProgress = {}
 }) => {
   const [form, setForm]           = useState({ ...userData });
@@ -28,7 +28,9 @@ const ProfilePage = ({
   const [isAnalyzing,  setIsAnalyzing]    = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [isSaving, setIsSaving]          = useState(false);
+  const [isDeleting, setIsDeleting]      = useState(false);
   const [saveError, setSaveError]        = useState('');
+  const [deleteError, setDeleteError]    = useState('');
 
   const loadProfileData = useCallback(async () => {
     if (!userData?.id) return;
@@ -88,6 +90,22 @@ const ProfilePage = ({
       setSaveError(err?.message || 'Unable to save profile right now.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userData?.id) return;
+    const confirmed = window.confirm('Delete your account permanently? This action cannot be undone.');
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      await onDeleteAccount();
+      setShowProfileModal(false);
+    } catch (err) {
+      setDeleteError(err?.message || 'Unable to delete account right now.');
+      setIsDeleting(false);
     }
   };
   const handlePhotoChange = e => {
@@ -312,8 +330,15 @@ const ProfilePage = ({
                       {isSaving ? 'Saving...' : 'Save Changes'}
                     </button>
                   </div>
+
+                  <div className={styles.deleteAccountRow}>
+                    <button type="button" className={styles.deleteAccountBtn} onClick={handleDeleteAccount} disabled={isDeleting}>
+                      {isDeleting ? 'Deleting...' : 'Delete Account'}
+                    </button>
+                  </div>
                   {isSaving && <p className={styles.saveStatus}>Saving your information…</p>}
                   {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
+                  {deleteError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{deleteError}</p>}
                 </form>
               </div>
             </div>

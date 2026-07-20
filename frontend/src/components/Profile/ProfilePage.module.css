@@ -620,6 +620,34 @@
   margin-top: 4px;
 }
 
+.deleteAccountRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.deleteAccountBtn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+.deleteAccountBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.deleteAccountBtn:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
 .submitBtn {
   background: #22c55e;
   color: #0f1a2e;
