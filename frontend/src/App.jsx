@@ -45,6 +45,8 @@ function App() {
 
   const [userData, setUserData] = useState(EMPTY_USER);
   const [progress, setProgress] = useState({});
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressLoaded, setProgressLoaded] = useState(false);
   const [justMasteredConcept, setJustMasteredConcept] = useState(null);
 
   useEffect(() => {
@@ -97,12 +99,41 @@ function App() {
     setIsAdmin(false);
     setUserData(EMPTY_USER);
     setProgress({});
+    setProgressLoading(false);
+    setProgressLoaded(false);
     setSelectedLang(null);
     setSelectedLevel(null);
     setSelectedConcept(null);
     setCurrentTaskIndex(0);
     setSavedTaskIndices({});
     goToLanding();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!userData?.id) throw new Error('User ID not found.');
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/auth/delete-account/${userData.id}`, {
+        method: 'DELETE'
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error('Failed to parse response:', res.status, res.statusText);
+        throw new Error(`Server error: ${res.status} ${res.statusText}`);
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Unable to delete account.');
+      }
+    } catch (err) {
+      console.error('Delete account failed:', err);
+      throw err;
+    }
+
+    handleLogout();
   };
 
   const goToAdmin         = () => navigate('/admin');
@@ -133,27 +164,41 @@ function App() {
   };
 
   const fetchAndSetProgress = async (userId) => {
-    if (!userId) return;
+    setProgressLoaded(false);
+    setProgress({});
+    if (!userId) {
+      setProgressLoading(false);
+      return false;
+    }
+
+    setProgressLoading(true);
     try {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
         setProgress(prev => mergeProgress(prev, data));
       }
-    } catch {}
+      return true;
+    } catch (err) {
+      console.error('Failed to load progress:', err);
+      return false;
+    } finally {
+      setProgressLoading(false);
+      setProgressLoaded(true);
+    }
   };
 
-  const handleSignUp = (user) => {
+  const handleSignUp = async (user) => {
     setUserData(user);
-    fetchAndSetProgress(user?.id);
-    goToLanguages();
+    const loaded = await fetchAndSetProgress(user?.id);
+    if (loaded) goToLanguages();
   };
 
-  const handleLogin = (loginData) => {
+  const handleLogin = async (loginData) => {
     if (loginData?.isAdmin) { setIsAdmin(true); goToAdmin(); return; }
     setUserData(loginData);
-    fetchAndSetProgress(loginData?.id);
-    goToLanguages();
+    const loaded = await fetchAndSetProgress(loginData?.id);
+    if (loaded) goToLanguages();
   };
 
   if (currentPage === 'landing') return (
@@ -178,7 +223,7 @@ function App() {
     />
   );
   if (currentPage === 'profile') return (
-    <ProfilePage userData={userData} onSave={handleSaveProfile}
+    <ProfilePage userData={userData} onSave={handleSaveProfile} onDeleteAccount={handleDeleteAccount}
       isDarkMode={isDarkMode} toggleTheme={toggleTheme}
       onHomeClick={goToLanguages} onLogout={handleLogout} progress={progress} />
   );

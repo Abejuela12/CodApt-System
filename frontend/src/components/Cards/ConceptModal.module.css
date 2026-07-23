@@ -123,12 +123,45 @@
 .swiperContainer {
   width: 100%;
   padding: 20px 0;
+  overflow: visible;
 }
 
 .swiperSlide {
   width: auto;
   display: flex;
   justify-content: center;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:global(.swiper-slide) {
+  pointer-events: auto;
+  z-index: 1;
+  user-select: none;
+}
+
+:global(.swiper-slide-shadow-left),
+:global(.swiper-slide-shadow-right),
+:global(.swiper-slide-shadow-coverflow) {
+  pointer-events: none;
+}
+
+:global(.swiper-slide-active) {
+  z-index: 3;
+}
+
+:global(.swiper-wrapper) {
+  align-items: center;
+  pointer-events: none;
+}
+
+:global(.swiper-slide.swiperSlide) {
+  pointer-events: auto;
 }
 
 .swiperSlide.masteredSlide {
@@ -165,6 +198,11 @@
 .conceptCard {
   width: 240px;
   height: 300px;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 
   display: flex;
   flex-direction: column;
