@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import Split from 'react-split';
+import { Terminal } from 'xterm';
+import 'xterm/css/xterm.css';
 import './Split.css';
 import { calculateLanguageProgress, getLanguageLevel } from "../../utils/levelUtils";
 import { getHintLevel } from "../../utils/hintUtils";
 import { recommendNextTask } from "../../utils/recommendNextTask";
+import { normalizeOutput, normalizeTerminalOutput, extractEffectiveOutput, isOutputMatch } from "../../utils/outputMatching";
 
 // ── Mastery fanfare using Web Audio API (no external files needed) ──
 function playMasterySound() {
@@ -56,14 +59,6 @@ function playMasterySound() {
   } catch (e) {
     // Silently ignore — audio may be blocked before user interaction
   }
-}
-
-function normalizeOutput(str) {
-  return (str || '')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .trim();
 }
 
 function getStarterCode(language, task) {
@@ -128,6 +123,12 @@ const CodeEditor = ({
   const [tasks, setTasks]         = useState([]);
   const [output, setOutput]       = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [terminalSessionId, setTerminalSessionId] = useState(null);
+  const [terminalStatus, setTerminalStatus] = useState('idle');
+  const terminalContainerRef = useRef(null);
+  const xtermRef = useRef(null);
+  const terminalBufferRef = useRef('');
+  const terminalSessionIdRef = useRef(null);
   const [currentTier, setCurrentTier]     = useState('Beginner');
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
@@ -174,16 +175,80 @@ const CodeEditor = ({
     setIsRunning(true);
     setOutput('⏳ Running...');
     try {
+      if (terminalSessionId) {
+        await fetch(`http://localhost:5000/api/terminal/${terminalSessionId}`, { method: 'DELETE' });
+      }
       const res  = await fetch('http://localhost:5000/api/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ language, code })
       });
       const data = await res.json();
-      setOutput(data.output || '(no output)');
+      const outputText = data.output || '';
+      setTerminalSessionId(data.sessionId || null);
+      terminalSessionIdRef.current = data.sessionId || null;
+      setTerminalStatus(data.status || 'idle');
+      setOutput(outputText);
+      terminalBufferRef.current = '';
+      if (xtermRef.current) {
+        xtermRef.current.clear();
+        if (outputText) {
+          xtermRef.current.write(outputText.replace(/\n/g, '\r\n'));
+        }
+        xtermRef.current.focus();
+      }
     } catch {
       setOutput('❌ Could not reach the backend. Make sure your server is running.');
+      xtermRef.current?.writeln('❌ Could not reach the backend. Make sure your server is running.');
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const handleXtermData = async (data) => {
+    if (!xtermRef.current) return;
+    const currentBuffer = terminalBufferRef.current;
+    if (data === '\r') {
+      const value = currentBuffer.trimEnd();
+      terminalBufferRef.current = '';
+      xtermRef.current.write('\r\n');
+      if (!value) {
+        return;
+      }
+      try {
+        const sessionId = terminalSessionIdRef.current;
+        if (!sessionId) {
+          xtermRef.current.writeln('❌ No active terminal session. Press Run again to restart.');
+          return;
+        }
+        const res = await fetch('http://localhost:5000/api/terminal/input', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, input: value })
+        });
+        const result = await res.json().catch(() => null);
+        if (!res.ok) {
+          const message = result?.message || result?.output || `HTTP ${res.status}`;
+          xtermRef.current.writeln(`❌ Input request failed: ${message}`);
+          return;
+        }
+        if (result?.output) {
+          xtermRef.current.write(result.output.replace(/\n/g, '\r\n'));
+          setOutput(prev => prev ? prev + result.output : result.output);
+        }
+        if (result?.status && result.status !== terminalStatus) {
+          setTerminalStatus(result.status);
+        }
+      } catch (err) {
+        console.error('Terminal input error:', err);
+        xtermRef.current.writeln(`❌ Failed to send input: ${err.message}`);
+      }
+    } else if (data === '\u007F') {
+      if (currentBuffer.length > 0) {
+        terminalBufferRef.current = currentBuffer.slice(0, -1);
+        xtermRef.current.write('\b \b');
+      }
+    } else {
+      terminalBufferRef.current += data;
+      xtermRef.current.write(data);
     }
   };
 
@@ -194,16 +259,41 @@ const CodeEditor = ({
     const timeSpentSeconds = Math.floor((Date.now() - startTime) / 1000);
 
     try {
-      setOutput('⏳ Running your code...');
-      const runRes  = await fetch('http://localhost:5000/api/run', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language, code })
-      });
-      const runData    = await runRes.json();
-      const actualOutput = runData.output || '';
-      setOutput(actualOutput || '(no output)');
+      const currentOutput = output || '';
+      let actualOutput = currentOutput;
+      let currentStatus = terminalStatus || 'idle';
+      let currentSessionId = terminalSessionId;
+      let runtimeError = false;
 
-      if (runData.error) {
+      if (!terminalSessionId) {
+        const runRes  = await fetch('http://localhost:5000/api/run', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language, code })
+        });
+        const runData = await runRes.json();
+        currentSessionId = runData.sessionId || null;
+        setTerminalSessionId(currentSessionId);
+        terminalSessionIdRef.current = currentSessionId;
+        currentStatus = runData.status || currentStatus;
+        actualOutput = runData.output || currentOutput;
+        runtimeError = runData.error || currentStatus === 'error';
+        setTerminalStatus(currentStatus);
+        setOutput(actualOutput);
+        if (xtermRef.current) {
+          if (actualOutput) {
+            xtermRef.current.write(actualOutput.replace(/\n/g, '\r\n'));
+          }
+          xtermRef.current.focus();
+        }
+      } else {
+        actualOutput = currentOutput;
+        runtimeError = currentStatus === 'error';
+      }
+
+      setTerminalStatus(currentStatus);
+      setOutput(actualOutput);
+
+      if (runtimeError) {
         const score = calculateScore(newAttempts, timeSpentSeconds, false);
         setAssessmentResult({
           correct: false, attempts: newAttempts, timeSpent: timeSpentSeconds,
@@ -211,7 +301,7 @@ const CodeEditor = ({
           cfgFeedback: [], syntaxErrors: 1, structuralErrors: 0,
           output: actualOutput, score, level: 'Easy',
           expected: task.expected_output || '',
-          recommendation: recommendNextTask(newAttempts, timeSpentSeconds, false, currentTaskIndex),
+          recommendation: recommendNextTask(newAttempts, timeSpentSeconds, false, currentTaskIndex) || 'Keep practising!',
           cosineRecommendation: null,
           nextTaskIndex: currentTaskIndex
         });
@@ -223,8 +313,9 @@ const CodeEditor = ({
       }
 
       const expected  = normalizeOutput(task.expected_output || '');
-      const actual    = normalizeOutput(actualOutput);
-      const isCorrect = actual === expected;
+      const actualRaw = normalizeTerminalOutput(actualOutput);
+      const actual    = extractEffectiveOutput(actualRaw, expected);
+      const isCorrect = isOutputMatch(actualOutput, task.expected_output || '');
 
       const submitRes  = await fetch('http://localhost:5000/api/submit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -248,6 +339,9 @@ const CodeEditor = ({
       const cosineRecommendation = submitData.recommendation   || null;
       const isMastered           = submitData.isMastered       || false;
       const score                = calculateScore(newAttempts, timeSpentSeconds, finalCorrect);
+      const recommendationText   = cosineRecommendation?.title
+        ? `${cosineRecommendation.title} • ${cosineRecommendation.concept} • ${cosineRecommendation.difficulty}`
+        : (rec || 'Keep practising!');
 
       const feedback = [];
       if (!isCorrect) {
@@ -272,7 +366,7 @@ const CodeEditor = ({
         feedback, cfgFeedback, syntaxErrors, structuralErrors,
         output: actualOutput, score, level: backendLevel,
         expected: task.expected_output || '',
-        recommendation: rec,
+        recommendation: recommendationText,
         cosineRecommendation: enrichedRecommendation,
         nextTaskIndex,
       });
@@ -318,12 +412,66 @@ const CodeEditor = ({
     if (!task) return;
     setCode(getStarterCode(language, task));
     setOutput('');
+    setTerminalSessionId(null);
+    terminalSessionIdRef.current = null;
+    setTerminalStatus('idle');
+    terminalBufferRef.current = '';
     setAttempts(0);
     setTimeSpent(0);
     setShowHint(false);
     setHintLevel(0);
     setHintUsed(false);
+    if (xtermRef.current) {
+      xtermRef.current.clear();
+    }
   }, [currentTaskIndex, tasks, language]);
+
+  useEffect(() => {
+    if (xtermRef.current || !terminalContainerRef.current) return;
+
+    const term = new Terminal({
+      cursorBlink: true,
+      disableStdin: false,
+      theme: { background: '#010409', foreground: '#d1d5db', cursor: '#d1d5db' },
+      fontFamily: 'monospace',
+      fontSize: 14,
+      cols: 80,
+      rows: 20,
+      scrollback: 1000,
+    });
+
+    term.open(terminalContainerRef.current);
+    term.focus();
+    term.onData(handleXtermData);
+    xtermRef.current = term;
+
+    return () => {
+      term.dispose();
+      xtermRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!terminalSessionId) return;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/terminal/${terminalSessionId}`);
+        const data = await res.json();
+        if (data.output && xtermRef.current) {
+          xtermRef.current.write(data.output.replace(/\n/g, '\r\n'));
+          setOutput(prev => prev ? prev + data.output : data.output);
+        }
+        if (data.status !== terminalStatus) {
+          setTerminalStatus(data.status || 'idle');
+        }
+      } catch {
+        setTerminalStatus('error');
+      }
+    }, 400);
+
+    return () => window.clearInterval(intervalId);
+  }, [terminalSessionId, terminalStatus]);
 
   const btnBase  = { padding: '8px 20px', borderRadius: '8px', fontWeight: '900', fontSize: '12px', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' };
   const btnHover = e => { e.target.style.transform = 'scale(1.05)'; e.target.style.opacity = '0.9'; };
@@ -459,9 +607,11 @@ const CodeEditor = ({
 
               <div style={{ display:'flex', flexDirection:'column', backgroundColor:'#010409', borderTop:'4px solid #161b22', minHeight:0 }}>
                 <div style={{ backgroundColor:'#0d1117', padding:'8px 16px', fontSize:'12px', fontWeight:'bold', textTransform:'uppercase', color:'#9ca3af', flexShrink:0 }}>Terminal</div>
-                <pre style={{ flex:1, padding:'16px', fontFamily:'monospace', fontSize:'14px', overflow:'auto', color:'#d1d5db', margin:0, whiteSpace:'pre-wrap' }}>
-                  {output || '> Terminal output will appear here...'}
-                </pre>
+                <div
+                  ref={terminalContainerRef}
+                  onClick={() => xtermRef.current?.focus()}
+                  style={{ flex:1, backgroundColor:'#010409', borderRadius:'0 0 0 0', overflow:'hidden', cursor:'text', minHeight:'220px' }}
+                />
               </div>
             </Split>
           </div>
@@ -549,8 +699,11 @@ const CodeEditor = ({
                   </div>
                 </div>
               ) : (
-                <div style={{ textAlign:'center', fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>
-                  {assessmentResult.recommendation || 'Keep practising!'}
+                <div style={{ backgroundColor:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', borderRadius:'10px', padding:'12px 14px', textAlign:'left' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#60a5fa', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'0.05em' }}>Recommendation</div>
+                  <div style={{ fontSize:'13px', color:'#e2e8f0', lineHeight:'1.6' }}>
+                    {assessmentResult.recommendation || 'Keep practising!'}
+                  </div>
                 </div>
               )}
             </div>

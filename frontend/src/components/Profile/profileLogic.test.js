@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calcMasteryProgress, buildOverallStats, getLanguageCapability, buildPerformanceChartData } from './profileLogic.js';
+import { calcMasteryProgress, buildOverallStats, getLanguageCapability, buildPerformanceChartData, isConceptMastered } from './profileLogic.js';
 
 function run() {
   const progress = {
@@ -49,6 +49,30 @@ function run() {
   assert.equal(fallback.chartData[3].java, 90, 'Fallback Java score should come from progress data');
   assert.equal(fallback.chartData[3].python, 70, 'Fallback Python score should come from progress data');
   assert.ok(fallback.chartData[3].java > fallback.chartData[1].java, 'Fallback chart should show a rising progression');
+
+  const completedConceptProgress = {
+    Python: {
+      'Input & Output': { tasksCompleted: 3, totalTasks: 3, successRate: 60 }
+    }
+  };
+  const completedConceptMastery = calcMasteryProgress('Python', completedConceptProgress);
+  assert.equal(completedConceptMastery.masteredConcepts, 1, 'A concept completed with the mastery threshold should count as mastered');
+  assert.equal(completedConceptMastery.percentage, 60, 'The mastery percentage should reflect the completed concept score');
+
+  const alternateNameProgress = {
+    Python: {
+      Conditionals: { tasksCompleted: 3, totalTasks: 3, successRate: 60 }
+    }
+  };
+  const alternateNameMastery = calcMasteryProgress('Python', alternateNameProgress);
+  assert.equal(alternateNameMastery.masteredConcepts, 1, 'A concept should still count as mastered when the progress uses an alternate spelling');
+
+  const ioProgress = {
+    JavaScript: {
+      'Input & Output': { tasksCompleted: 3, totalTasks: 3, successRate: 60 }
+    }
+  };
+  assert.ok(isConceptMastered(ioProgress, 'JavaScript', 'Input & Output'), 'Input & Output should be mastered when completed at the threshold');
 
   console.log('PASS profileLogic unit tests');
 }

@@ -114,12 +114,32 @@ function App() {
   const goToAdminSettings = () => navigate('/admin/settings');
 
   // Fetch progress from server and store it — called after login/signup
+  const mergeProgress = (existing = {}, fresh = {}) => {
+    const merged = { ...existing };
+
+    Object.entries(fresh || {}).forEach(([lang, concepts]) => {
+      merged[lang] = { ...existing[lang], ...concepts };
+    });
+
+    Object.entries(existing || {}).forEach(([lang, concepts]) => {
+      Object.entries(concepts || {}).forEach(([concept, data]) => {
+        if (data?.mastered) {
+          merged[lang] = { ...merged[lang], [concept]: { ...merged[lang]?.[concept], ...data } };
+        }
+      });
+    });
+
+    return merged;
+  };
+
   const fetchAndSetProgress = async (userId) => {
     if (!userId) return;
     try {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
       const data = await res.json();
-      if (data && typeof data === 'object') setProgress(data);
+      if (data && typeof data === 'object') {
+        setProgress(prev => mergeProgress(prev, data));
+      }
     } catch {}
   };
 
@@ -244,6 +264,7 @@ function App() {
                       totalTasks:     existing.totalTasks || 3,
                       // Ensure value meets the >= 60 mastery threshold in isMasteredConcept
                       successRate:    Math.max(existing.successRate || 0, 60),
+                      mastered:       true,
                     }
                   }
                 };
@@ -253,7 +274,7 @@ function App() {
               if (userData?.id) {
                 fetch(`http://localhost:5000/api/progress/${userData.id}`)
                   .then(r => r.json())
-                  .then(data => setProgress(data))
+                  .then(data => setProgress(prev => mergeProgress(prev, data)))
                   .catch(() => {});
               }
 

@@ -245,6 +245,13 @@ function isWithinControlFlowOrComputation(rawLines, index, lang) {
 
 // ─── syntax heuristics ───────────────────────────────────────────
 
+function isObjectPropertyLikeLine(line) {
+  const trimmed = line.trim();
+  return (/^(?:[$A-Z_][\w$]*|["'][^"']+["']|\d+)\s*:\s*.+/.test(trimmed) ||
+          /^(?:[$A-Z_][\w$]*|["'][^"']+["']|\d+)\s*,?\s*$/.test(trimmed) ||
+          /^\w+\s*:\s*.+/.test(trimmed));
+}
+
 function countSyntaxErrors(code, language) {
   const lang     = (language || '').toLowerCase();
   const lines    = code.split('\n');
@@ -287,12 +294,14 @@ function countSyntaxErrors(code, language) {
       const isBlockStatement = /^(if|else|for|while|do|try|catch|finally|switch|class|function|interface|enum)\b/.test(line);
       const isMethodSig      = /\)\s*\{?\s*$/.test(line) && /\(/.test(line);
       const isBraceOnly      = /^[{}]$/.test(line);
+      const isPropertyLike   = isObjectPropertyLikeLine(line);
 
       if (
         !/[{};]$/.test(line)  &&
         !isBlockStatement      &&
         !isMethodSig           &&
         !isBraceOnly           &&
+        !isPropertyLike        &&
         line.length > 3
       ) {
         messages.push(`Line ${lineNum}: possible missing semicolon`);

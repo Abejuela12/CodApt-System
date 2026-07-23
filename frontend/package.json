@@ -18,7 +18,8 @@
     "react-router-dom": "^7.18.0",
     "react-split": "^2.0.14",
     "recharts": "^3.7.0",
-    "swiper": "^12.1.2"
+    "swiper": "^12.1.2",
+    "xterm": "^5.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

@@ -68,7 +68,7 @@ const EVOLUTIONS = {
   ],
 };
 
-const CONCEPTS = ['Variables','Data Types','Operators','Conditional',
+const CONCEPTS = ['Variables','Data Types','Operators','Conditionals',
                   'Loops','Functions','Input & Output','Error Handling'];
 
 // Same capability logic as ProfilePage

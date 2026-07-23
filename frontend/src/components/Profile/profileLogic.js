@@ -1,13 +1,73 @@
-const DEFAULT_CONCEPTS = ['Variables','Data Types','Operators','Conditional','Loops','Functions','Input & Output','Error Handling'];
+const DEFAULT_CONCEPTS = ['Variables','Data Types','Operators','Conditionals','Loops','Functions','Input & Output','Error Handling'];
 const DEFAULT_LANGUAGES = ['Java', 'Python', 'JavaScript'];
+const DEFAULT_MASTERY_THRESHOLD = 60;
+
+function normalizeConceptName(conceptName, concepts = DEFAULT_CONCEPTS) {
+  const value = String(conceptName ?? '').trim();
+  if (!value) return '';
+
+  const exactMatch = concepts.find(c => c.toLowerCase() === value.toLowerCase());
+  if (exactMatch) return exactMatch;
+
+  const aliases = {
+    conditionals: 'Conditionals',
+    conditional: 'Conditionals',
+    loops: 'Loops',
+    loop: 'Loops',
+    'input/output': 'Input & Output',
+    'input & output': 'Input & Output',
+  };
+
+  return aliases[value.toLowerCase()] || value;
+}
+
+function normalizeLanguageName(language, progress = {}) {
+  const value = String(language ?? '').trim();
+  if (!value) return '';
+  if (progress[value]) return value;
+  const found = Object.keys(progress).find(key => key.toLowerCase() === value.toLowerCase());
+  return found || value;
+}
+
+function getLanguageProgress(progress = {}, language) {
+  const normalizedLang = normalizeLanguageName(language, progress);
+  return progress?.[normalizedLang] || {};
+}
+
+function getConceptProgress(langData = {}, conceptName, concepts = DEFAULT_CONCEPTS) {
+  const normalizedName = normalizeConceptName(conceptName, concepts);
+  const direct = langData[conceptName];
+  if (direct) return direct;
+
+  const alias = langData[normalizedName];
+  if (alias) return alias;
+
+  const found = Object.entries(langData).find(([key]) => normalizeConceptName(key, concepts).toLowerCase() === normalizedName.toLowerCase());
+  return found?.[1] || null;
+}
+
+function isConceptMastered(progress = {}, language, conceptName, threshold = DEFAULT_MASTERY_THRESHOLD, concepts = DEFAULT_CONCEPTS) {
+  const langData = getLanguageProgress(progress, language);
+  const data = getConceptProgress(langData, conceptName, concepts);
+  if (!data) return false;
+
+  if (data.mastered === true || data.isMastered === true) return true;
+
+  const tasksCompleted = data.tasksCompleted ?? 0;
+  const totalTasks = data.totalTasks ?? 3;
+  const successRate = data.successRate ?? 0;
+
+  if (successRate >= threshold && tasksCompleted >= 2) return true;
+  return tasksCompleted >= totalTasks && successRate >= threshold;
+}
 
 function getLanguageCapability(language, progress = {}, concepts = DEFAULT_CONCEPTS) {
-  const langData = progress[language] || {};
-  const attempted = concepts.filter(c => langData[c] && (langData[c]?.tasksCompleted ?? 0) > 0);
+  const langData = getLanguageProgress(progress, language);
+  const attempted = concepts.filter(c => getConceptProgress(langData, c, concepts));
   if (attempted.length === 0) return { label: 'Beginner', color: '#ef4444' };
 
-  const mastered = attempted.filter(c => (langData[c]?.successRate ?? 0) >= 80);
-  const avgSuccess = attempted.reduce((sum, c) => sum + (langData[c]?.successRate ?? 0), 0) / attempted.length;
+  const mastered = attempted.filter(c => isConceptMastered(progress, language, c, DEFAULT_MASTERY_THRESHOLD, concepts));
+  const avgSuccess = attempted.reduce((sum, c) => sum + (getConceptProgress(langData, c, concepts)?.successRate ?? 0), 0) / attempted.length;
 
   if (mastered.length >= 4 && avgSuccess >= 80) return { label: 'Advanced', color: '#22c55e' };
   if (attempted.length >= 2 && avgSuccess >= 50) return { label: 'Intermediate', color: '#facc15' };
@@ -15,12 +75,12 @@ function getLanguageCapability(language, progress = {}, concepts = DEFAULT_CONCE
 }
 
 function calcMasteryProgress(language, progress = {}, concepts = DEFAULT_CONCEPTS) {
-  const langData = progress[language] || {};
-  const attempted = concepts.filter(c => langData[c] && (langData[c]?.tasksCompleted ?? 0) > 0);
+  const langData = getLanguageProgress(progress, language);
+  const attempted = concepts.filter(c => getConceptProgress(langData, c, concepts));
   if (attempted.length === 0) return { masteredConcepts: 0, totalConcepts: concepts.length, percentage: 0, avgSuccess: 0 };
 
-  const avgSuccess = attempted.reduce((sum, c) => sum + (langData[c]?.successRate ?? 0), 0) / attempted.length;
-  const masteredConcepts = attempted.filter(c => (langData[c]?.successRate ?? 0) >= 80).length;
+  const avgSuccess = attempted.reduce((sum, c) => sum + (getConceptProgress(langData, c, concepts)?.successRate ?? 0), 0) / attempted.length;
+  const masteredConcepts = attempted.filter(c => isConceptMastered(progress, language, c, DEFAULT_MASTERY_THRESHOLD, concepts)).length;
 
   return { masteredConcepts, totalConcepts: concepts.length, percentage: Math.round(avgSuccess), avgSuccess };
 }
@@ -119,4 +179,4 @@ function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concept
   return { totalMastered, avgSuccess, rank, langStats, rec, actions, interp };
 }
 
-export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData };
+export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress };

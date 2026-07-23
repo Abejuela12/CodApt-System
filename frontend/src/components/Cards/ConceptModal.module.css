@@ -131,6 +131,35 @@
   justify-content: center;
 }
 
+.swiperSlide.masteredSlide {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.92;
+}
+
+.masteredOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+
+.masteredLockBadge {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(250, 204, 21, 0.18);
+  color: #facc15;
+  font-weight: 800;
+  font-size: 12px;
+  border: 1px solid rgba(250, 204, 21, 0.4);
+  backdrop-filter: blur(4px);
+}
+
 
 /* ================= CONCEPT CARD ================= */
 .conceptCard {
@@ -167,6 +196,35 @@
   transform: translateY(-10px) scale(1.05);
   border-color: #ffcc00;
   box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+}
+
+.conceptCard.masteredCard,
+.masteredCard:hover {
+  transform: none;
+  border-color: #facc15;
+  box-shadow: 0 0 22px rgba(250,204,21,0.35);
+  cursor: not-allowed;
+}
+
+.conceptCard.masteredCard {
+  pointer-events: none;
+  opacity: 0.92;
+  background: linear-gradient(145deg, rgba(250,204,21,0.12), rgba(15,23,42,0.92));
+}
+
+.conceptCard.masteredCard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  background: rgba(15,23,42,0.35);
+  pointer-events: none;
+}
+
+.conceptCard.masteredCard:hover {
+  transform: none !important;
+  border-color: #facc15 !important;
+  box-shadow: 0 0 22px rgba(250,204,21,0.35) !important;
 }
 
 .conceptCard::before {

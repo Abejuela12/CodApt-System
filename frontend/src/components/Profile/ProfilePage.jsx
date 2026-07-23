@@ -6,7 +6,7 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
 import { getConceptLevel } from '../../utils/levelUtils';
-import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData } from './profileLogic';
+import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress } from './profileLogic';
 
 const LANGUAGES = DEFAULT_LANGUAGES;
 const CONCEPTS  = DEFAULT_CONCEPTS;
@@ -23,7 +23,7 @@ const ProfilePage = ({
   const [chartData,   setChartData]       = useState([]);
   const [activeChartLangs, setActiveChartLangs] = useState([]);
   const [loadingData, setLoadingData]     = useState(false);
-  const [selectedLang, setSelectedLang]   = useState('Java');
+  const [selectedLang, setSelectedLang]   = useState(Object.keys(propProgress || {})[0] || 'Java');
   const [showAnalysis, setShowAnalysis]   = useState(false);
   const [isAnalyzing,  setIsAnalyzing]    = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -67,6 +67,12 @@ const ProfilePage = ({
   }, [loadProfileData]);
 
   useEffect(() => { if (Object.keys(propProgress).length > 0) setProgress(propProgress); }, [propProgress]);
+  useEffect(() => {
+    const langs = Object.keys(progress || {});
+    if (langs.length > 0 && !langs.includes(selectedLang)) {
+      setSelectedLang(langs[0]);
+    }
+  }, [progress, selectedLang]);
   useEffect(() => { if (!showToast) return; const t = setTimeout(() => setShowToast(false), 3000); return () => clearTimeout(t); }, [showToast]);
   useEffect(() => { if (!showAnalysis) return; setIsAnalyzing(true); const t = setTimeout(() => setIsAnalyzing(false), 1800); return () => clearTimeout(t); }, [showAnalysis]);
 
@@ -99,14 +105,14 @@ const ProfilePage = ({
 
   // Only show concepts user has actually attempted (tasksCompleted > 0)
   const conceptRows = CONCEPTS.map(concept => {
-    const stored         = progress?.[selectedLang]?.[concept];
+    const stored         = getConceptProgress(progress?.[selectedLang] || {}, concept);
     const tasksCompleted = stored?.tasksCompleted ?? 0;
     const success        = stored?.successRate ?? 0;
-    const hasData        = !!stored && tasksCompleted > 0;
-    const isMastered     = hasData && success >= 80;
+    const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
+    const isMastered     = hasData && isConceptMastered(progress, selectedLang, concept);
     const masteryPct     = hasData ? Math.round(success) : 0;
     const lvl            = hasData
-      ? getConceptLevel({ tasksCompleted: isMastered ? 3 : 1, totalTasks: 3, successRate: success })
+      ? getConceptLevel({ tasksCompleted: isMastered ? 3 : Math.max(tasksCompleted, 1), totalTasks: 3, successRate: success })
       : { label: 'Not Started', color: '#64748b' };
     return { concept, success, masteryPct, isMastered, hasData, lvl };
   });

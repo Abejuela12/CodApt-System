@@ -5,6 +5,7 @@ import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 import 'swiper/css/effect-coverflow';
+import { isConceptMastered } from '../Profile/profileLogic';
 import styles from './ConceptModal.module.css';
 
 
@@ -32,12 +33,6 @@ const conceptDescriptions = {
   "Error Handling": "Techniques for managing and responding to errors that occur during program execution. Helps prevent crashes and provides better user experience."
 };
 
-// ── Helper: check mastery from progress data ──────────────────────
-function isMasteredConcept(progress, language, conceptName) {
-  const d = progress?.[language]?.[conceptName];
-  return !!(d && d.tasksCompleted >= d.totalTasks && d.successRate >= 60);
-}
-
 const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justMasteredConcept = null }) => {
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -49,11 +44,9 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
 
   const handleConceptClick = (index) => {
     const concept = filteredConcepts[index];
-    const mastered = isMasteredConcept(progress, language, concept.name);
+    const mastered = isConceptMastered(progress, language, concept.name);
 
     if (mastered) {
-      setPopupConcept(concept.name);
-      setShowMasteredPopup(true);
       return;
     }
 
@@ -62,7 +55,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
   };
 
   const handleStart = () => {
-    if (selectedConcept && !isMasteredConcept(progress, language, selectedConcept)) {
+    if (selectedConcept && !isConceptMastered(progress, language, selectedConcept)) {
       onSelect(selectedConcept);
     }
   };
@@ -85,7 +78,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <button className={styles.closeBtn} onClick={onClose}>✕</button>
         <h2 className={styles.modalTitle}>
-          Choose a Concept - {language?.toUpperCase()} ({level})
+          Choose a Concept - {language?.toUpperCase()} 
         </h2>
 
         {/* ── "Just Mastered" congratulatory banner ── */}
@@ -165,8 +158,13 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
                 {conceptDescriptions[selectedConcept]}
               </p>
             </div>
-            <button className={styles.startBtn} onClick={handleStart}>
-              <span>▶</span> Start Learning
+            <button
+              className={styles.startBtn}
+              onClick={handleStart}
+              disabled={isConceptMastered(progress, language, selectedConcept)}
+              style={isConceptMastered(progress, language, selectedConcept) ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+            >
+              <span>▶</span> {isConceptMastered(progress, language, selectedConcept) ? 'Already Mastered' : 'Start Learning'}
             </button>
           </div>
         ) : (
@@ -192,22 +190,32 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
               className={styles.swiperContainer}
             >
               {filteredConcepts.map((item, index) => {
-                const mastered = isMasteredConcept(progress, language, item.name);
+                const mastered = isConceptMastered(progress, language, item.name);
                 return (
-                  <SwiperSlide key={item.name} className={styles.swiperSlide}>
+                  <SwiperSlide
+                    key={item.name}
+                    className={`${styles.swiperSlide} ${mastered ? styles.masteredSlide : ''}`}
+                    style={mastered ? { cursor: 'not-allowed' } : undefined}
+                  >
                     <div
-                      className={styles.conceptCard}
-                      onClick={() => handleConceptClick(index)}
+                      className={`${styles.conceptCard} ${mastered ? styles.masteredCard : ''}`}
+                      onClick={mastered ? undefined : () => handleConceptClick(index)}
                       style={mastered
                         ? {
                             borderColor: '#facc15',
                             boxShadow: '0 0 22px rgba(250,204,21,0.35)',
                             position: 'relative',
-                            cursor: 'pointer',
-                            opacity: 0.85
+                            cursor: 'not-allowed',
+                            opacity: 0.9,
+                            filter: 'saturate(0.9)',
                           }
                         : { position: 'relative', cursor: 'pointer' }}
                     >
+                      {mastered && (
+                        <div className={styles.masteredOverlay} onClick={(e) => e.stopPropagation()}>
+                          <div className={styles.masteredLockBadge}>🔒 Already Mastered</div>
+                        </div>
+                      )}
                       {mastered && (
                         <>
                           {/* Gold "Mastered" badge top-right */}

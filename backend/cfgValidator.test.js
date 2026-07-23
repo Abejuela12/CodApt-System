@@ -19,6 +19,14 @@ const cases = [
     expected: { constructUsed: false, structuralErrors: 2 }
   },
   {
+    name: 'JS object literal valid',
+    lang: 'javascript',
+    code: 'const student = {\n  name: "Rosa",\n  grade: 92\n};\nconsole.table(student);\nconsole.log("Data loaded successfully");\nconsole.error("Invalid input detected");',
+    construct: 'console.log',
+    expectedOutput: 'Data loaded successfully',
+    expected: { constructUsed: true, structuralErrors: 1 }
+  },
+  {
     name: 'JS for valid',
     lang: 'javascript',
     code: 'for(let i=0;i<3;i++){console.log(i);}',
@@ -157,6 +165,23 @@ const cases = [
 ];
 
 let failed = 0;
+
+const objectLiteralResult = validateCFG(
+  'const student = { name: "Rosa", grade: 92 };\nconsole.table(student);\nconsole.log("Data loaded successfully");\nconsole.error("Invalid input detected");',
+  'javascript',
+  'console.log',
+  'Data loaded successfully'
+);
+
+try {
+  assert.strictEqual(objectLiteralResult.syntaxErrors, 0, 'JS object literal should not trigger missing semicolon warnings');
+  console.log('PASS: JS object literal regression');
+} catch (err) {
+  failed += 1;
+  console.error('FAIL: JS object literal regression');
+  console.error(err.message);
+  console.error('Result:', objectLiteralResult);
+}
 
 cases.forEach(test => {
   const result = validateCFG(test.code, test.lang, test.construct, test.expectedOutput);
