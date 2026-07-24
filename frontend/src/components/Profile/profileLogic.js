@@ -57,7 +57,8 @@ function isConceptMastered(progress = {}, language, conceptName, threshold = DEF
   const totalTasks = data.totalTasks ?? 3;
   const successRate = data.successRate ?? 0;
 
-  if (successRate >= threshold && tasksCompleted >= 2) return true;
+  // Only consider a concept mastered once the user has completed all tasks
+  // and maintained the required success rate.
   return tasksCompleted >= totalTasks && successRate >= threshold;
 }
 

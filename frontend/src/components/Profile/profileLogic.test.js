@@ -17,12 +17,12 @@ function run() {
   };
 
   const mastery = calcMasteryProgress('Python', progress);
-  assert.equal(mastery.masteredConcepts, 5, 'Python should count 5 mastered concepts');
+  assert.equal(mastery.masteredConcepts, 2, 'Python should count only fully completed mastered concepts');
   assert.equal(mastery.totalConcepts, 8, 'The concept list should contain 8 concepts');
   assert.equal(mastery.percentage, 80, 'Average percentage should be rounded correctly');
 
   const overall = buildOverallStats(progress);
-  assert.equal(overall.totalMastered, 5, 'Overall mastered count should reflect the mastered concepts');
+  assert.equal(overall.totalMastered, 2, 'Overall mastered count should reflect only fully completed mastered concepts');
   assert.equal(overall.rank, 'Silver', 'Performance should map to a Silver rank for this sample');
 
   const capability = getLanguageCapability('Python', progress);

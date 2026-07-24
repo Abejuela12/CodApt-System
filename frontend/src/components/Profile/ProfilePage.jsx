@@ -12,6 +12,25 @@ const LANGUAGES = DEFAULT_LANGUAGES;
 const CONCEPTS  = DEFAULT_CONCEPTS;
 const API       = 'http://localhost:5000';
 
+const mergeProgressData = (existing = {}, fresh = {}) => {
+  const merged = { ...(existing || {}) };
+
+  Object.entries(fresh || {}).forEach(([lang, concepts]) => {
+    const nextLangData = { ...(existing?.[lang] || {}) };
+
+    Object.entries(concepts || {}).forEach(([concept, data]) => {
+      nextLangData[concept] = {
+        ...(existing?.[lang]?.[concept] || {}),
+        ...(data || {})
+      };
+    });
+
+    merged[lang] = nextLangData;
+  });
+
+  return merged;
+};
+
 const ProfilePage = ({
   userData, onSave, onDeleteAccount, isDarkMode, toggleTheme,
   onHomeClick, onLogout, progress: propProgress = {}
@@ -19,7 +38,6 @@ const ProfilePage = ({
   const [form, setForm]           = useState({ ...userData });
   const [showToast, setShowToast] = useState(false);
   const fileInputRef              = useRef(null);
-  const [progress,    setProgress]        = useState(propProgress);
   const [chartData,   setChartData]       = useState([]);
   const [activeChartLangs, setActiveChartLangs] = useState([]);
   const [loadingData, setLoadingData]     = useState(false);
@@ -38,50 +56,38 @@ const ProfilePage = ({
     setLoadingData(true);
 
     try {
-      const [progressResult, dailyResult] = await Promise.allSettled([
-        fetch(`${API}/api/progress/${userData.id}`),
-        fetch(`${API}/api/daily-progress/${userData.id}`)
-      ]);
+      const dailyResult = await fetch(`${API}/api/daily-progress/${userData.id}`);
+      const rows = dailyResult.ok ? await dailyResult.json() : [];
 
-      const progressData = progressResult.status === 'fulfilled'
-        ? await progressResult.value.json()
-        : {};
-      const rows = dailyResult.status === 'fulfilled'
-        ? await dailyResult.value.json()
-        : [];
-
-      setProgress(progressData || {});
-
-      const fallback = buildPerformanceChartData(rows, progressData || {});
+      const fallback = buildPerformanceChartData(rows, propProgress || {});
       setChartData(fallback.chartData);
       setActiveChartLangs(fallback.activeChartLangs);
     } catch {
-      const fallback = buildPerformanceChartData([], {});
+      const fallback = buildPerformanceChartData([], propProgress || {});
       setChartData(fallback.chartData);
       setActiveChartLangs(fallback.activeChartLangs);
     } finally {
       setLoadingData(false);
     }
-  }, [userData?.id]);
+  }, [userData?.id, propProgress]);
 
   useEffect(() => {
     loadProfileData();
   }, [loadProfileData]);
 
-  useEffect(() => { if (Object.keys(propProgress).length > 0) setProgress(propProgress); }, [propProgress]);
   useEffect(() => {
-    const langs = Object.keys(progress || {});
+    const langs = Object.keys(propProgress || {});
     if (langs.length > 0 && !langs.includes(selectedLang)) {
       setSelectedLang(langs[0]);
     }
-  }, [progress, selectedLang]);
+  }, [propProgress, selectedLang]);
   useEffect(() => { if (!showToast) return; const t = setTimeout(() => setShowToast(false), 3000); return () => clearTimeout(t); }, [showToast]);
   useEffect(() => { if (!showAnalysis) return; setIsAnalyzing(true); const t = setTimeout(() => setIsAnalyzing(false), 1800); return () => clearTimeout(t); }, [showAnalysis]);
 
-  const langCapability = getLanguageCapability(selectedLang, progress);
-  const langMastery    = calcMasteryProgress(selectedLang, progress);
+  const langCapability = getLanguageCapability(selectedLang, propProgress);
+  const langMastery    = calcMasteryProgress(selectedLang, propProgress);
 
-  const overall = buildOverallStats(progress, LANGUAGES, CONCEPTS);
+  const overall = buildOverallStats(propProgress, LANGUAGES, CONCEPTS);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -123,11 +129,11 @@ const ProfilePage = ({
 
   // Only show concepts user has actually attempted (tasksCompleted > 0)
   const conceptRows = CONCEPTS.map(concept => {
-    const stored         = getConceptProgress(progress?.[selectedLang] || {}, concept);
+    const stored         = getConceptProgress(propProgress?.[selectedLang] || {}, concept);
     const tasksCompleted = stored?.tasksCompleted ?? 0;
     const success        = stored?.successRate ?? 0;
     const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
-    const isMastered     = hasData && isConceptMastered(progress, selectedLang, concept);
+    const isMastered     = hasData && isConceptMastered(propProgress, selectedLang, concept);
     const masteryPct     = hasData ? Math.round(success) : 0;
     const lvl            = hasData
       ? getConceptLevel({ tasksCompleted: isMastered ? 3 : Math.max(tasksCompleted, 1), totalTasks: 3, successRate: success })

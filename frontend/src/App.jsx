@@ -19,6 +19,55 @@ const EMPTY_USER = {
   photo:    null
 };
 
+const getProgressStorageKey = (userId) => `codapt_progress_${userId || 'guest'}`;
+const getTaskIndexStorageKey = (userId) => `codapt_task_indices_${userId || 'guest'}`;
+
+const readStoredProgress = (userId) => {
+  if (!userId || typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(getProgressStorageKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveStoredProgress = (userId, progressData) => {
+  if (!userId || typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(getProgressStorageKey(userId), JSON.stringify(progressData || {}));
+  } catch {
+    // Ignore storage quota issues: the app should still continue working in-memory.
+  }
+};
+
+const readStoredTaskIndices = (userId) => {
+  if (!userId || typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(getTaskIndexStorageKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveStoredTaskIndices = (userId, taskIndices) => {
+  if (!userId || typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(getTaskIndexStorageKey(userId), JSON.stringify(taskIndices || {}));
+  } catch {
+    // Ignore storage quota issues: the app should still continue working in-memory.
+  }
+};
+
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,11 +89,11 @@ function App() {
 
   // Tracks the last task index per concept so "Back" resumes where you left off
   // Shape: { [language]: { [concept]: taskIndex } }
-  const [savedTaskIndices, setSavedTaskIndices] = useState({});
+  const [savedTaskIndices, setSavedTaskIndices] = useState(() => readStoredTaskIndices(EMPTY_USER.id));
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
   const [userData, setUserData] = useState(EMPTY_USER);
-  const [progress, setProgress] = useState({});
+  const [progress, setProgress] = useState(() => readStoredProgress(EMPTY_USER.id));
   const [progressLoading, setProgressLoading] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [justMasteredConcept, setJustMasteredConcept] = useState(null);
@@ -52,6 +101,27 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+  useEffect(() => {
+    if (userData?.id) {
+      const storedIndices = readStoredTaskIndices(userData.id);
+      setSavedTaskIndices(storedIndices);
+    } else {
+      setSavedTaskIndices({});
+    }
+  }, [userData?.id]);
+
+  useEffect(() => {
+    if (userData?.id && Object.keys(progress || {}).length > 0) {
+      saveStoredProgress(userData.id, progress);
+    }
+  }, [progress, userData?.id]);
+
+  useEffect(() => {
+    if (userData?.id) {
+      saveStoredTaskIndices(userData.id, savedTaskIndices);
+    }
+  }, [savedTaskIndices, userData?.id]);
 
   const saveTaskIndex = (lang, concept, index) => {
     setSavedTaskIndices(prev => ({
@@ -96,6 +166,22 @@ function App() {
   const toggleTheme = () => setIsDarkMode(prev => !prev);
 
   const handleLogout = () => {
+    if (userData?.id) {
+      const finalTaskIndices = selectedLang && selectedConcept != null
+        ? {
+            ...savedTaskIndices,
+            [selectedLang]: {
+              ...savedTaskIndices[selectedLang],
+              [selectedConcept]: currentTaskIndex
+            }
+          }
+        : savedTaskIndices;
+
+      saveStoredProgress(userData.id, progress);
+      saveStoredTaskIndices(userData.id, finalTaskIndices);
+      setSavedTaskIndices(finalTaskIndices);
+    }
+
     setIsAdmin(false);
     setUserData(EMPTY_USER);
     setProgress({});
@@ -165,7 +251,14 @@ function App() {
 
   const fetchAndSetProgress = async (userId) => {
     setProgressLoaded(false);
-    setProgress({});
+
+    const cachedProgress = readStoredProgress(userId);
+    if (userId && Object.keys(cachedProgress).length > 0) {
+      setProgress(cachedProgress);
+    } else {
+      setProgress({});
+    }
+
     if (!userId) {
       setProgressLoading(false);
       return false;
@@ -176,8 +269,14 @@ function App() {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
-        setProgress(prev => mergeProgress(prev, data));
+        setProgress(prev => {
+          const merged = mergeProgress(prev, data);
+          saveStoredProgress(userId, merged);
+          return merged;
+        });
       }
+      // Also restore task indices after loading progress
+      setSavedTaskIndices(readStoredTaskIndices(userId));
       return true;
     } catch (err) {
       console.error('Failed to load progress:', err);
@@ -190,6 +289,7 @@ function App() {
 
   const handleSignUp = async (user) => {
     setUserData(user);
+    setSavedTaskIndices(readStoredTaskIndices(user?.id));
     const loaded = await fetchAndSetProgress(user?.id);
     if (loaded) goToLanguages();
   };
@@ -197,6 +297,7 @@ function App() {
   const handleLogin = async (loginData) => {
     if (loginData?.isAdmin) { setIsAdmin(true); goToAdmin(); return; }
     setUserData(loginData);
+    setSavedTaskIndices(readStoredTaskIndices(loginData?.id));
     const loaded = await fetchAndSetProgress(loginData?.id);
     if (loaded) goToLanguages();
   };
@@ -331,6 +432,7 @@ function App() {
               setSelectedConcept(null);
               return;
             }
+
             saveTaskIndex(selectedLang, selectedConcept, nextIndex);
             setCurrentTaskIndex(nextIndex);
           }}
