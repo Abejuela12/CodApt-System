@@ -792,7 +792,6 @@ app.get('/api/progress/:userId', async (req, res) => {
       const tasksCompleted = Number(row.tasks_completed) || 0;
       const totalTasks     = Number(row.total_tasks) || 0;
       const successRate    = Math.round((row.success_rate || 0) * 100);
-      const requiredCorrect = totalTasks > 0 ? Math.ceil(totalTasks / 3) : 0;
 
       progress[row.language][row.concept] = {
         tasksCompleted,
@@ -801,9 +800,7 @@ app.get('/api/progress/:userId', async (req, res) => {
         performanceLevel: row.performance_level,
         syntaxErrors:     row.syntax_errors,
         structuralErrors: row.structural_errors,
-        // Mastery requires meeting a per-concept correct-answer threshold
-        // (ceil of totalTasks/3) AND a minimum success rate (60%).
-        mastered:         tasksCompleted >= requiredCorrect && successRate >= 60,
+        mastered:         tasksCompleted >= totalTasks && successRate >= 60,
       };
     });
     res.json(progress);
@@ -884,7 +881,7 @@ app.get('/api/admin/users', async (req, res) => {
          ),
          mastery_by_lang AS (
            SELECT language,
-                  SUM(CASE WHEN tasks_completed >= CEIL(total_tasks::float / 3) AND success_rate >= 0.6 THEN 1 ELSE 0 END)::int AS mastered_concepts
+                  SUM(CASE WHEN tasks_completed >= total_tasks AND success_rate >= 0.6 THEN 1 ELSE 0 END)::int AS mastered_concepts
            FROM user_profiles
            WHERE user_id = $1
            GROUP BY language
