@@ -480,6 +480,13 @@ app.post('/api/submit', async (req, res) => {
     const alreadySolved = parseInt(previousSolveRows[0]?.solved, 10) > 0;
     const newlySolved = finalCorrect && !alreadySolved ? 1 : 0;
 
+    // Preserve a learner's existing total_tasks once they have a profile.
+    // This prevents the user's progress percentage from dropping if new
+    // problems are added to the DB after they started the concept.
+    const effectiveTotalTasks = existing.length > 0
+      ? (existing[0].total_tasks || totalTasksInDB)
+      : totalTasksInDB;
+
     if (existing.length === 0) {
       // SUPABASE (pg): $1–$10
       await db.query(
@@ -490,7 +497,7 @@ app.post('/api/submit', async (req, res) => {
          VALUES ($1, $2, $3, 1, $4, $5, $6, $7, 1, $8, $9, 'Easy')`,
         [
           userId, language, concept,
-          successValue, totalTasksInDB, successValue, timeSpent,
+          successValue, effectiveTotalTasks, successValue, timeSpent,
           syntaxErrors, structuralErrors
         ]
       );
@@ -508,7 +515,7 @@ app.post('/api/submit', async (req, res) => {
            structural_errors = structural_errors + $6
          WHERE user_id = $7 AND language = $8 AND concept = $9`,
         [
-          newlySolved, totalTasksInDB, successValue, timeSpent,
+          newlySolved, effectiveTotalTasks, successValue, timeSpent,
           syntaxErrors, structuralErrors,
           userId, language, concept
         ]

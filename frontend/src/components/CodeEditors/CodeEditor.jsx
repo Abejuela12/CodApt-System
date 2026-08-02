@@ -329,7 +329,14 @@ const CodeEditor = ({
       const submitData = await submitRes.json();
       console.log('✅ Backend Response:', submitData);
 
-      const finalCorrect         = submitData.correct          ?? isCorrect;
+      // Require agreement between server and client before treating as correct.
+      // Some mismatches can occur (server-side CFG checks, normalization differences).
+      const serverCorrect        = submitData.correct === true;
+      const serverConstructUsed  = submitData.constructUsed === true;
+      const finalCorrect         = serverCorrect && isCorrect && serverConstructUsed;
+      if (!serverCorrect && isCorrect) {
+        console.warn('Submit mismatch: local output match but server did not mark correct', { problemId: task?.id, userId: userData?.id });
+      }
       const cfgFeedback          = submitData.cfgFeedback      || [];
       const syntaxErrors         = submitData.syntaxErrors     ?? 0;
       const structuralErrors     = submitData.structuralErrors ?? 0;
