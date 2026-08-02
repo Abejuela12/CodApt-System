@@ -234,11 +234,11 @@ const ProfilePage = ({
 
             <div className={styles.progressContainer}>
               <div className={styles.progressBar}>
-                <div className={styles.progressFill} style={{ width:`${langMastery.percentage}%` }} />
+                <div className={styles.progressFill} style={{ width:`${langMastery.completionPercentage}%` }} />
               </div>
               <span className={styles.progressText} onClick={() => setShowAnalysis(true)}
                 style={{ cursor:'pointer', textDecoration:'underline' }}>
-                {langMastery.masteredConcepts}/{langMastery.totalConcepts} concepts mastered ({langMastery.percentage}%) ▶
+                {langMastery.masteredConcepts}/{langMastery.totalConcepts} concepts mastered ({langMastery.completionPercentage}%) ▶
               </span>
             </div>
 

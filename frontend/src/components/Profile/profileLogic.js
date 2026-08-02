@@ -83,7 +83,8 @@ function calcMasteryProgress(language, progress = {}, concepts = DEFAULT_CONCEPT
   const avgSuccess = attempted.reduce((sum, c) => sum + (getConceptProgress(langData, c, concepts)?.successRate ?? 0), 0) / attempted.length;
   const masteredConcepts = attempted.filter(c => isConceptMastered(progress, language, c, DEFAULT_MASTERY_THRESHOLD, concepts)).length;
 
-  return { masteredConcepts, totalConcepts: concepts.length, percentage: Math.round(avgSuccess), avgSuccess };
+  const completionPercentage = Math.round((masteredConcepts / concepts.length) * 100);
+  return { masteredConcepts, totalConcepts: concepts.length, percentage: Math.round(avgSuccess), avgSuccess, completionPercentage };
 }
 
 function buildPerformanceChartData(rows = [], progress = {}) {

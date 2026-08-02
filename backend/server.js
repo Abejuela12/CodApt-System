@@ -799,15 +799,26 @@ app.get('/api/admin/users', async (req, res) => {
          TO_CHAR(u.created_at, 'YYYY-MM-DD') AS joined_date,
          COALESCE(SUM(up.tasks_completed), 0) AS tasks_completed,
          COALESCE(SUM(up.total_tasks), 0) AS total_tasks,
-         CASE WHEN COALESCE(SUM(up.total_tasks), 0) > 0
-           THEN ROUND(SUM(up.tasks_completed)::numeric / SUM(up.total_tasks) * 100)
-           ELSE 0 END AS progress,
+         COALESCE(lp.progress, 0) AS progress,
          COALESCE(COUNT(DISTINCT up.concept), 0) AS concepts_count,
-         COALESCE(MAX(dp.progress_date)::text, '') AS last_active
+         COALESCE(dp.last_active, '') AS last_active
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
-       LEFT JOIN daily_progress dp ON dp.user_id = u.id
-       GROUP BY u.id, u.created_at
+       LEFT JOIN LATERAL (
+         SELECT ROUND(AVG(lang_score)) AS progress
+         FROM (
+           SELECT ROUND(AVG(success_rate) * 100) AS lang_score
+           FROM user_profiles
+           WHERE user_id = u.id
+           GROUP BY language
+         ) lang_scores
+       ) lp ON true
+       LEFT JOIN LATERAL (
+         SELECT TO_CHAR(MAX(progress_date), 'YYYY-MM-DD') AS last_active
+         FROM daily_progress dp
+         WHERE dp.user_id = u.id
+       ) dp ON true
+       GROUP BY u.id, u.created_at, dp.last_active, lp.progress
        ORDER BY u.name ASC`
     );
 
@@ -1173,9 +1184,15 @@ app.get('/api/admin/reports', async (req, res) => {
     const { rows: metricsRows } = await db.query(
       `SELECT
          COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
-         COALESCE(ROUND(SUM(tasks_completed)::decimal / NULLIF(SUM(total_tasks), 0) * 100), 0) AS avg_progress
-       FROM user_profiles up
-       ${profileWhere}`
+         COALESCE(ROUND(AVG(language_score) * 100), 0) AS avg_progress
+       FROM (
+         SELECT user_id,
+                language,
+                AVG(success_rate) AS language_score
+         FROM user_profiles up
+         ${profileWhere}
+         GROUP BY user_id, language
+       ) language_averages`
     );
 
     const { rows: performanceRows } = await db.query(
