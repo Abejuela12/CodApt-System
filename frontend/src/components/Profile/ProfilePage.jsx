@@ -132,10 +132,10 @@ const ProfilePage = ({
     const stored         = getConceptProgress(propProgress?.[selectedLang] || {}, concept);
     const tasksCompleted = stored?.tasksCompleted ?? 0;
     const success        = stored?.successRate ?? 0;
-    const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
-    const isMastered     = hasData && isConceptMastered(propProgress, selectedLang, concept);
-    const masteryPct     = hasData ? Math.round(success) : 0;
-    const lvl            = hasData
+    const hasData    = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
+    const isMastered = hasData && isConceptMastered(propProgress, selectedLang, concept);
+    const masteryPct = hasData ? Math.round(success) : 0;
+    const lvl        = hasData
       ? getConceptLevel({ tasksCompleted: isMastered ? 3 : Math.max(tasksCompleted, 1), totalTasks: 3, successRate: success })
       : { label: 'Not Started', color: '#64748b' };
     return { concept, success, masteryPct, isMastered, hasData, lvl };

@@ -130,10 +130,10 @@ function App() {
     }));
   };
 
-  const handleCompleteTask = (language, concept, taskId) => {
+  const handleCompleteTask = (language, concept, taskId, totalTasks = 3) => {
     setProgress(prev => {
       const existing = prev?.[language]?.[concept] || {};
-      const totalTasks = existing.totalTasks || 3;
+      const effectiveTotal = existing.totalTasks || totalTasks || 3;
       return {
         ...prev,
         [language]: {
@@ -141,8 +141,8 @@ function App() {
           [concept]: {
             ...existing,
             tasksCompleted: Math.max(existing.tasksCompleted || 0, taskId),
-            totalTasks,
-            successRate: Math.max(existing.successRate || 0, Math.round((taskId / totalTasks) * 100)),
+            totalTasks: effectiveTotal,
+            successRate: Math.max(existing.successRate || 0, Math.round((taskId / effectiveTotal) * 100)),
           }
         }
       };
@@ -232,16 +232,24 @@ function App() {
 
   // Fetch progress from server and store it — called after login/signup
   const mergeProgress = (existing = {}, fresh = {}) => {
-    const merged = { ...existing };
-
-    Object.entries(fresh || {}).forEach(([lang, concepts]) => {
-      merged[lang] = { ...existing[lang], ...concepts };
-    });
+    const merged = { ...fresh };
 
     Object.entries(existing || {}).forEach(([lang, concepts]) => {
+      merged[lang] = merged[lang] || {};
+
       Object.entries(concepts || {}).forEach(([concept, data]) => {
-        if (data?.mastered) {
-          merged[lang] = { ...merged[lang], [concept]: { ...merged[lang]?.[concept], ...data } };
+        if (!merged[lang][concept]) {
+          merged[lang][concept] = data;
+        } else {
+          const serverConcept = merged[lang][concept];
+          merged[lang][concept] = {
+            ...serverConcept,
+            ...Object.fromEntries(
+              Object.entries(data).filter(
+                ([key, value]) => value != null && serverConcept[key] == null
+              )
+            )
+          };
         }
       });
     });
@@ -251,35 +259,31 @@ function App() {
 
   const fetchAndSetProgress = async (userId) => {
     setProgressLoaded(false);
-
-    const cachedProgress = readStoredProgress(userId);
-    if (userId && Object.keys(cachedProgress).length > 0) {
-      setProgress(cachedProgress);
-    } else {
-      setProgress({});
-    }
+    setProgressLoading(true);
 
     if (!userId) {
+      setProgress({});
       setProgressLoading(false);
+      setProgressLoaded(true);
       return false;
     }
 
-    setProgressLoading(true);
+    const cachedProgress = readStoredProgress(userId);
     try {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
-        setProgress(prev => {
-          const merged = mergeProgress(prev, data);
-          saveStoredProgress(userId, merged);
-          return merged;
-        });
+        setProgress(data);
+        saveStoredProgress(userId, data);
+      } else {
+        setProgress(cachedProgress || {});
       }
-      // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
       return true;
     } catch (err) {
       console.error('Failed to load progress:', err);
+      setProgress(cachedProgress || {});
+      setSavedTaskIndices(readStoredTaskIndices(userId));
       return false;
     } finally {
       setProgressLoading(false);
@@ -389,9 +393,10 @@ function App() {
           isDarkMode={isDarkMode}
           progress={progress}
           currentTaskIndex={currentTaskIndex}
-          onNextTask={(nextIndex, masteredConcept = null) => {
+          onNextTask={(nextIndex, masteredConcept = null, totalTasks = 3) => {
             if (nextIndex === 'Complete!') {
               const conceptName = masteredConcept || selectedConcept;
+              const effectiveTotal = progress?.[selectedLang]?.[conceptName]?.totalTasks || totalTasks || 3;
 
               // ── Optimistic update: mark mastered BEFORE setSelectedConcept(null) ──
               // ConceptModal mounts synchronously after that call, so progress must
@@ -406,8 +411,8 @@ function App() {
                     ...prev[selectedLang],
                     [conceptName]: {
                       ...existing,
-                      tasksCompleted: existing.totalTasks || existing.tasksCompleted || 3,
-                      totalTasks:     existing.totalTasks || 3,
+                      tasksCompleted: existing.totalTasks || existing.tasksCompleted || effectiveTotal,
+                      totalTasks:     existing.totalTasks || effectiveTotal,
                       // Ensure value meets the >= 60 mastery threshold in isMasteredConcept
                       successRate:    Math.max(existing.successRate || 0, 60),
                       mastered:       true,

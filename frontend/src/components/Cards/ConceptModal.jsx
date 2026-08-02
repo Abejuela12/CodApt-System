@@ -136,8 +136,8 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
             </div>
             {/* Mastered banner inside card detail */}
             {(() => {
+              const mastered = selectedConcept && isConceptMastered(progress, language, selectedConcept);
               const d = progress?.[language]?.[selectedConcept];
-              const mastered = d && d.tasksCompleted >= d.totalTasks && d.successRate >= 60;
               return mastered ? (
                 <div style={{
                   backgroundColor: 'rgba(250,204,21,0.12)', border: '1px solid #facc15',
@@ -147,7 +147,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
                   <span style={{ fontSize: '20px' }}>🏆</span>
                   <div>
                     <div style={{ color: '#facc15', fontWeight: '800', fontSize: '14px' }}>You've mastered this concept!</div>
-                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>{d.successRate}% success · {d.tasksCompleted} tasks done</div>
+                    <div style={{ color: '#94a3b8', fontSize: '12px' }}>{d?.successRate ?? 0}% success · {d?.tasksCompleted ?? 0} tasks done</div>
                   </div>
                 </div>
               ) : null;

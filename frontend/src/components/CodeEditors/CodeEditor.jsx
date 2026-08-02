@@ -380,7 +380,7 @@ const CodeEditor = ({
 
       setAttempts(newAttempts);
       setTimeSpent(timeSpentSeconds);
-      if (finalCorrect) onCompleteTask(language, concept, currentTaskIndex + 1);
+      if (finalCorrect) onCompleteTask(language, concept, currentTaskIndex + 1, tasks.length);
 
       // Show mastery celebration whenever the last task is solved correctly,
       // regardless of what the backend isMastered flag says (DB timing can lag).
@@ -807,7 +807,7 @@ const CodeEditor = ({
 
             <div style={{ display:'flex', gap:'12px', justifyContent:'center' }}>
               <button
-                onClick={() => { setShowMastery(false); onNextTask?.('Complete!', concept); }}
+                onClick={() => { setShowMastery(false); onNextTask?.('Complete!', concept, tasks.length); }}
                 style={{ padding:'13px 28px', borderRadius:'12px', border:'none', background:'linear-gradient(135deg,#facc15,#f59e0b)', color:'#1e3a5f', fontWeight:'900', fontSize:'15px', cursor:'pointer', boxShadow:'0 5px 18px rgba(250,204,21,0.45)', transition:'transform 0.15s' }}
                 onMouseEnter={e => e.currentTarget.style.transform='translateY(-2px)'}
                 onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}
@@ -815,7 +815,7 @@ const CodeEditor = ({
                 Choose Next Concept →
               </button>
               <button
-                onClick={() => { setShowMastery(false); onNextTask?.('Complete!', concept); }}
+                onClick={() => { setShowMastery(false); onNextTask?.('Complete!', concept, tasks.length); }}
                 style={{ padding:'13px 20px', borderRadius:'12px', border:'1px solid #334155', background:'transparent', color:'#94a3b8', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}
               >
                 Back to Menu

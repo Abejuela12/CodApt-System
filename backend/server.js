@@ -461,12 +461,19 @@ app.post('/api/submit', async (req, res) => {
       [userId, language, concept]
     );
 
-    // Fetch real total task count for the concept.
-    // user_profiles is scoped to language + concept, not difficulty.
+    // Fetch the task count for the current concept + difficulty + tier.
+    // The frontend completes a concept after the active task set is solved,
+    // so the backend should use the same task set size rather than all tasks
+    // across every difficulty or tier for the concept.
     // SUPABASE (pg): COUNT(*) returns a string in pg — cast to int.
     const { rows: problemCountRows } = await db.query(
-      `SELECT COUNT(*) AS total FROM problems WHERE language = $1 AND concept = $2`,
-      [language, concept]
+      `SELECT COUNT(*) AS total
+       FROM problems
+       WHERE language = $1
+         AND concept = $2
+         AND difficulty = $3
+         AND problem_tier = $4`,
+      [language, concept, problem.difficulty, problem.problem_tier]
     );
     const totalTasksInDB = parseInt(problemCountRows[0]?.total, 10) || 3;
 
@@ -755,20 +762,38 @@ app.get('/api/progress/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // SUPABASE (pg): { rows } and $1
     const { rows } = await db.query(
-      `SELECT language, concept, tasks_completed, total_tasks,
-              success_rate, performance_level, syntax_errors, structural_errors
-       FROM user_profiles WHERE user_id = $1`,
+      `WITH solved AS (
+         SELECT language, concept, COUNT(DISTINCT problem_id) AS tasks_completed
+         FROM submissions
+         WHERE user_id = $1 AND is_correct = true
+         GROUP BY language, concept
+       )
+       SELECT
+         COALESCE(up.language, s.language) AS language,
+         COALESCE(up.concept, s.concept) AS concept,
+         COALESCE(s.tasks_completed, 0) AS tasks_completed,
+         COALESCE(up.total_tasks, 3) AS total_tasks,
+         up.success_rate,
+         up.performance_level,
+         up.syntax_errors,
+         up.structural_errors
+       FROM user_profiles up
+       FULL OUTER JOIN solved s
+         ON s.language = up.language
+        AND s.concept  = up.concept
+       WHERE up.user_id = $1 OR s.language IS NOT NULL`,
       [userId]
     );
 
     const progress = {};
     rows.forEach(row => {
       if (!progress[row.language]) progress[row.language] = {};
-      const tasksCompleted = row.tasks_completed;
-      const totalTasks     = row.total_tasks;
-      const successRate    = Math.round(row.success_rate * 100);
+      const tasksCompleted = Number(row.tasks_completed) || 0;
+      const totalTasks     = Number(row.total_tasks) || 0;
+      const successRate    = Math.round((row.success_rate || 0) * 100);
+      const requiredCorrect = totalTasks > 0 ? Math.ceil(totalTasks / 3) : 0;
+
       progress[row.language][row.concept] = {
         tasksCompleted,
         totalTasks,
@@ -776,7 +801,9 @@ app.get('/api/progress/:userId', async (req, res) => {
         performanceLevel: row.performance_level,
         syntaxErrors:     row.syntax_errors,
         structuralErrors: row.structural_errors,
-        mastered:         tasksCompleted >= totalTasks && successRate >= 60,
+        // Mastery requires meeting a per-concept correct-answer threshold
+        // (ceil of totalTasks/3) AND a minimum success rate (60%).
+        mastered:         tasksCompleted >= requiredCorrect && successRate >= 60,
       };
     });
     res.json(progress);
@@ -788,9 +815,29 @@ app.get('/api/progress/:userId', async (req, res) => {
 
 app.get('/api/admin/users', async (req, res) => {
   try {
-    // Get all users with overall stats
+    // Get all users with overall stats using the same progress definition as the User Panel.
     const { rows: users } = await db.query(
-      `SELECT
+      `WITH user_language_avgs AS (
+         SELECT user_id,
+                language,
+                AVG(success_rate) AS avg_success
+         FROM user_profiles
+         GROUP BY user_id, language
+       ),
+       user_overall_progress AS (
+         SELECT user_id,
+                ROUND(AVG(avg_success) * 100) AS progress
+         FROM user_language_avgs
+         WHERE avg_success > 0
+         GROUP BY user_id
+       ),
+       user_last_active AS (
+         SELECT user_id,
+                TO_CHAR(MAX(progress_date), 'YYYY-MM-DD') AS last_active
+         FROM daily_progress
+         GROUP BY user_id
+       )
+       SELECT
          u.id,
          u.name,
          u.username,
@@ -799,32 +846,66 @@ app.get('/api/admin/users', async (req, res) => {
          TO_CHAR(u.created_at, 'YYYY-MM-DD') AS joined_date,
          COALESCE(SUM(up.tasks_completed), 0) AS tasks_completed,
          COALESCE(SUM(up.total_tasks), 0) AS total_tasks,
-         CASE WHEN COALESCE(SUM(up.total_tasks), 0) > 0
-           THEN ROUND(SUM(up.tasks_completed)::numeric / SUM(up.total_tasks) * 100)
-           ELSE 0 END AS progress,
+         COALESCE(uop.progress, 0) AS progress,
          COALESCE(COUNT(DISTINCT up.concept), 0) AS concepts_count,
-         COALESCE(MAX(dp.progress_date)::text, '') AS last_active
+         COALESCE(ula.last_active, '') AS last_active
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
-       LEFT JOIN daily_progress dp ON dp.user_id = u.id
-       GROUP BY u.id, u.created_at
+       LEFT JOIN user_overall_progress uop ON uop.user_id = u.id
+       LEFT JOIN user_last_active ula ON ula.user_id = u.id
+       GROUP BY u.id, u.created_at, uop.progress, ula.last_active
        ORDER BY u.name ASC`
     );
 
     // For each user, fetch per-language stats
     const enrichedUsers = await Promise.all(users.map(async (user) => {
       const { rows: langStats } = await db.query(
-        `SELECT
-           language,
-           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
-           COALESCE(SUM(total_tasks), 0) AS total_tasks,
-           CASE WHEN COALESCE(SUM(total_tasks), 0) > 0
-             THEN ROUND(AVG(success_rate) * 100)
-             ELSE 0 END AS score
-         FROM user_profiles
-         WHERE user_id = $1
-         GROUP BY language
-         ORDER BY language ASC`,
+        `WITH solved_by_lang AS (
+           SELECT language, COUNT(DISTINCT problem_id) AS tasks_completed
+           FROM submissions
+           WHERE user_id = $1 AND is_correct = true
+           GROUP BY language
+         ),
+         total_by_lang AS (
+           SELECT language, COUNT(*) AS total_tasks
+           FROM problems
+           GROUP BY language
+         ),
+         total_concepts_by_lang AS (
+           SELECT language, COUNT(DISTINCT concept) AS total_concepts
+           FROM problems
+           GROUP BY language
+         ),
+         avg_success_by_lang AS (
+           SELECT language, ROUND(AVG(success_rate) * 100) AS score
+           FROM user_profiles
+           WHERE user_id = $1
+           GROUP BY language
+         ),
+         mastery_by_lang AS (
+           SELECT language,
+                  SUM(CASE WHEN tasks_completed >= CEIL(total_tasks::float / 3) AND success_rate >= 0.6 THEN 1 ELSE 0 END)::int AS mastered_concepts
+           FROM user_profiles
+           WHERE user_id = $1
+           GROUP BY language
+         )
+         SELECT
+           COALESCE(s.language, t.language) AS language,
+           COALESCE(s.tasks_completed, 0) AS tasks_completed,
+           COALESCE(t.total_tasks, 0) AS total_tasks,
+           COALESCE(c.total_concepts, 0) AS total_concepts,
+           COALESCE(a.score, 0) AS score,
+           COALESCE(m.mastered_concepts, 0) AS mastered_concepts
+         FROM solved_by_lang s
+         FULL OUTER JOIN total_by_lang t
+           ON t.language = s.language
+         FULL OUTER JOIN total_concepts_by_lang c
+           ON c.language = COALESCE(s.language, t.language)
+         LEFT JOIN avg_success_by_lang a
+           ON a.language = COALESCE(s.language, t.language)
+         LEFT JOIN mastery_by_lang m
+           ON m.language = COALESCE(s.language, t.language)
+         ORDER BY COALESCE(s.language, t.language) ASC`,
         [user.id]
       );
 
@@ -835,34 +916,41 @@ app.get('/api/admin/users', async (req, res) => {
         java: 0
       };
 
+      const languageDetails = {
+        python: { mastered: false, masteredConcepts: 0, totalConcepts: 0, tasksCompleted: 0, totalTasks: 0 },
+        javascript: { mastered: false, masteredConcepts: 0, totalConcepts: 0, tasksCompleted: 0, totalTasks: 0 },
+        java: { mastered: false, masteredConcepts: 0, totalConcepts: 0, tasksCompleted: 0, totalTasks: 0 }
+      };
+
       langStats.forEach(stat => {
         const lang = (stat.language || '').toLowerCase();
+        const masteredConcepts = Number(stat.mastered_concepts || 0);
+        const totalConcepts = Number(stat.total_concepts || 0);
+        const mastered = masteredConcepts >= Math.max(1, Math.round(totalConcepts * 0.75));
+        const tasksCompleted = Number(stat.tasks_completed || 0);
+        const totalTasks = Number(stat.total_tasks || 0);
+
         if (lang === 'python') scores.python = Number(stat.score) || 0;
         else if (lang === 'javascript') scores.javascript = Number(stat.score) || 0;
         else if (lang === 'java') scores.java = Number(stat.score) || 0;
+
+        if (languageDetails[lang]) {
+          languageDetails[lang] = {
+            mastered,
+            masteredConcepts,
+            totalConcepts,
+            tasksCompleted,
+            totalTasks
+          };
+        }
       });
 
-      // Get language-specific progress details
-      const { rows: langProgress } = await db.query(
-        `SELECT
-           language,
-           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
-           COALESCE(SUM(total_tasks), 0) AS total_tasks
-         FROM user_profiles
-         WHERE user_id = $1
-         GROUP BY language
-         ORDER BY language ASC`,
+      const { rows: solvedTotal } = await db.query(
+        `SELECT COUNT(DISTINCT problem_id) AS completed_lessons
+         FROM submissions
+         WHERE user_id = $1 AND is_correct = true`,
         [user.id]
       );
-
-      const languageDetails = {};
-      langProgress.forEach(lp => {
-        const lang = (lp.language || '').toLowerCase();
-        languageDetails[lang] = {
-          tasksCompleted: Number(lp.tasks_completed) || 0,
-          totalTasks: Number(lp.total_tasks) || 0
-        };
-      });
 
       return {
         id: user.id,
@@ -871,7 +959,7 @@ app.get('/api/admin/users', async (req, res) => {
         email: user.email,
         photo: user.photo || null,
         progress: Number(user.progress),
-        completedLessons: Number(user.tasks_completed),
+        completedLessons: Number(solvedTotal[0]?.completed_lessons) || 0,
         certificates: Number(user.concepts_count),
         enrolledDate: user.joined_date || 'Unknown',
         lastActive: user.last_active || 'Unknown',
@@ -1171,11 +1259,24 @@ app.get('/api/admin/reports', async (req, res) => {
     const performanceWhere = buildPerformanceWhere(selectedTimeframe, selectedUser);
 
     const { rows: metricsRows } = await db.query(
-      `SELECT
-         COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
-         COALESCE(ROUND(SUM(tasks_completed)::decimal / NULLIF(SUM(total_tasks), 0) * 100), 0) AS avg_progress
-       FROM user_profiles up
-       ${profileWhere}`
+      `WITH language_scores AS (
+         SELECT up.user_id,
+                up.language,
+                AVG(up.success_rate) AS avg_success
+         FROM user_profiles up
+         ${profileWhere}
+         GROUP BY up.user_id, up.language
+       ),
+       user_scores AS (
+         SELECT user_id,
+                AVG(avg_success) AS avg_user_success
+         FROM language_scores
+         GROUP BY user_id
+       )
+       SELECT
+         COALESCE(ROUND((SELECT AVG(avg_success) FROM language_scores) * 100), 0) AS avg_score,
+         COALESCE(ROUND((SELECT AVG(avg_user_success) FROM user_scores) * 100), 0) AS avg_progress
+       `
     );
 
     const { rows: performanceRows } = await db.query(

@@ -51,15 +51,8 @@ function isConceptMastered(progress = {}, language, conceptName, threshold = DEF
   const data = getConceptProgress(langData, conceptName, concepts);
   if (!data) return false;
 
-  if (data.mastered === true || data.isMastered === true) return true;
-
-  const tasksCompleted = data.tasksCompleted ?? 0;
-  const totalTasks = data.totalTasks ?? 3;
-  const successRate = data.successRate ?? 0;
-
-  // Only consider a concept mastered once the user has completed all tasks
-  // and maintained the required success rate.
-  return tasksCompleted >= totalTasks && successRate >= threshold;
+  // Only use the algorithm/backend-provided mastered flag.
+  return data.mastered === true || data.isMastered === true;
 }
 
 function getLanguageCapability(language, progress = {}, concepts = DEFAULT_CONCEPTS) {

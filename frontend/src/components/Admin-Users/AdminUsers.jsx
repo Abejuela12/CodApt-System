@@ -218,29 +218,23 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>Python</span>
                   <span className={styles.scoreValue}>{selectedUser.scores?.python || 0}%</span>
-                  {selectedUser.languageDetails?.python && (
-                    <span className={styles.scoreMeta}>
-                      {selectedUser.languageDetails.python.tasksCompleted}/{selectedUser.languageDetails.python.totalTasks} tasks
-                    </span>
-                  )}
+                  <span className={styles.scoreMeta}>
+                    {selectedUser.languageDetails?.python?.tasksCompleted || 0}/{selectedUser.languageDetails?.python?.totalTasks || 0} tasks
+                  </span>
                 </div>
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>JavaScript</span>
                   <span className={styles.scoreValue}>{selectedUser.scores?.javascript || 0}%</span>
-                  {selectedUser.languageDetails?.javascript && (
-                    <span className={styles.scoreMeta}>
-                      {selectedUser.languageDetails.javascript.tasksCompleted}/{selectedUser.languageDetails.javascript.totalTasks} tasks
-                    </span>
-                  )}
+                  <span className={styles.scoreMeta}>
+                    {selectedUser.languageDetails?.javascript?.tasksCompleted || 0}/{selectedUser.languageDetails?.javascript?.totalTasks || 0} tasks
+                  </span>
                 </div>
                 <div className={styles.scoreItem}>
                   <span className={styles.scoreLabel}>Java</span>
                   <span className={styles.scoreValue}>{selectedUser.scores?.java || 0}%</span>
-                  {selectedUser.languageDetails?.java && (
-                    <span className={styles.scoreMeta}>
-                      {selectedUser.languageDetails.java.tasksCompleted}/{selectedUser.languageDetails.java.totalTasks} tasks
-                    </span>
-                  )}
+                  <span className={styles.scoreMeta}>
+                    {selectedUser.languageDetails?.java?.tasksCompleted || 0}/{selectedUser.languageDetails?.java?.totalTasks || 0} tasks
+                  </span>
                 </div>
               </div>
             </div>
