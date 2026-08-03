@@ -540,6 +540,33 @@ app.post('/api/submit', async (req, res) => {
       performance_level: 'Easy'
     };
 
+    const { rows: conceptRows } = await db.query(
+      `SELECT tasks_completed, total_tasks, success_rate
+       FROM user_profiles
+       WHERE user_id = $1 AND language = $2`,
+      [userId, language]
+    );
+
+    let completionSum = 0;
+    let weightedSuccess = 0;
+    let totalTasks = 0;
+
+    conceptRows.forEach(row => {
+      const completed = Number(row.tasks_completed || 0);
+      const total = Number(row.total_tasks || 0);
+      const success = Number(row.success_rate || 0);
+      const mastered = total > 0 && completed >= total && success >= 0.60;
+
+      completionSum += mastered ? 1 : (total > 0 ? completed / total : 0);
+      weightedSuccess += success * total;
+      totalTasks += total;
+    });
+
+    const conceptCount = conceptRows.length;
+    const completionRatio = conceptCount > 0 ? completionSum / conceptCount : 0;
+    const successRate = totalTasks > 0 ? weightedSuccess / totalTasks : (conceptCount > 0 ? conceptRows.reduce((sum, row) => sum + Number(row.success_rate || 0), 0) / conceptCount : 0);
+    const computedScore = Math.round((0.7 * completionRatio + 0.3 * successRate) * 100);
+
     // SUPABASE (pg): { rows } and $1–$3
     // pg returns COUNT as string — parse to int for comparison
     const { rows: hardSolveRows } = await db.query(
@@ -610,15 +637,16 @@ app.post('/api/submit', async (req, res) => {
 
     // ── 7. Update daily_progress ─────────────────────────────────
     const today = new Date().toISOString().slice(0, 10);
-    const score = Math.round(profile.success_rate * 100);
+    const score = computedScore;
     if (userId) {
       // SUPABASE (pg): ON CONFLICT replaces MySQL's ON DUPLICATE KEY UPDATE
       // Requires a UNIQUE constraint on (user_id, language, progress_date) in your schema
       await db.query(
         `INSERT INTO daily_progress (user_id, language, progress_date, score)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (user_id, language, progress_date) DO UPDATE SET score = $5`,
-        [userId, language, today, score, score]
+         ON CONFLICT (user_id, language, progress_date) DO UPDATE SET score =
+           GREATEST(daily_progress.score, EXCLUDED.score)`,
+        [userId, language, today, score]
       );
     }
 
@@ -805,13 +833,34 @@ app.get('/api/admin/users', async (req, res) => {
        FROM users u
        LEFT JOIN user_profiles up ON up.user_id = u.id
        LEFT JOIN LATERAL (
-         SELECT ROUND(AVG(lang_score)) AS progress
-         FROM (
-           SELECT ROUND(AVG(success_rate) * 100) AS lang_score
-           FROM user_profiles
-           WHERE user_id = u.id
-           GROUP BY language
-         ) lang_scores
+         SELECT GREATEST(
+           COALESCE(
+             (SELECT ROUND(AVG(concept_completion) * 100)
+              FROM (
+                SELECT
+                  CASE
+                    WHEN total_tasks > 0 AND tasks_completed > 0 AND success_rate >= 0.80
+                         THEN 1
+                    WHEN total_tasks > 0 AND tasks_completed > 0
+                         THEN LEAST(success_rate, 1)
+                    ELSE 0
+                  END AS concept_completion
+                FROM user_profiles
+                WHERE user_id = u.id
+              ) concept_progress),
+             0
+           ),
+           COALESCE(
+             (SELECT ROUND(AVG(best_score))
+              FROM (
+                SELECT language, MAX(score) AS best_score
+                FROM daily_progress dp
+                WHERE dp.user_id = u.id
+                GROUP BY language
+              ) best_scores),
+             0
+           )
+         ) AS progress
        ) lp ON true
        LEFT JOIN LATERAL (
          SELECT TO_CHAR(MAX(progress_date), 'YYYY-MM-DD') AS last_active
@@ -1182,17 +1231,24 @@ app.get('/api/admin/reports', async (req, res) => {
     const performanceWhere = buildPerformanceWhere(selectedTimeframe, selectedUser);
 
     const { rows: metricsRows } = await db.query(
-      `SELECT
-         COALESCE(ROUND(AVG(success_rate) * 100), 0) AS avg_score,
-         COALESCE(ROUND(AVG(language_score) * 100), 0) AS avg_progress
-       FROM (
-         SELECT user_id,
-                language,
-                AVG(success_rate) AS language_score
-         FROM user_profiles up
-         ${profileWhere}
+      `WITH latest_scores AS (
+         SELECT user_id, language, score
+         FROM (
+           SELECT user_id, language, score,
+                  ROW_NUMBER() OVER (PARTITION BY user_id, language ORDER BY progress_date DESC) AS rn
+           FROM daily_progress dp
+           ${performanceWhere}
+         ) ranked_scores
+         WHERE rn = 1
+       ), best_scores AS (
+         SELECT user_id, language, MAX(score) AS best_score
+         FROM daily_progress dp
+         ${performanceWhere}
          GROUP BY user_id, language
-       ) language_averages`
+       )
+       SELECT
+         (SELECT COALESCE(ROUND(AVG(score)), 0) FROM latest_scores) AS avg_score,
+         (SELECT COALESCE(ROUND(AVG(best_score)), 0) FROM best_scores) AS avg_progress`
     );
 
     const { rows: performanceRows } = await db.query(
