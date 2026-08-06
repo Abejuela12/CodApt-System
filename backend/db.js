@@ -22,7 +22,10 @@ if (!databaseUrl) {
 
   db = new Pool({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    max: 1,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 10000
   });
 
   db.on('connect', (client) => {
