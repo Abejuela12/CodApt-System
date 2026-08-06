@@ -54,7 +54,9 @@ async function ensureArchivedColumn() {
   }
 }
 
-ensureArchivedColumn();
+if (require.main === module) {
+  ensureArchivedColumn();
+}
 
 /* ─────────────────────────────────────
    HELPER — SHA-256 password hash
