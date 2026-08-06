@@ -1,4 +1,7 @@
 {
+  "version": 2,
+  "buildCommand": "npm install --include=dev && npm run build",
+  "outputDirectory": "dist",
   "functions": {
     "api/index.js": {
       "includeFiles": "../backend/**"
