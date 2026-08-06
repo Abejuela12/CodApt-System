@@ -28,7 +28,13 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: formData.email, password: formData.password }),
       });
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+        setError(`Server returned status ${res.status}. Ensure DATABASE_URL is set in Vercel environment variables.`);
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error || 'Login failed. Please try again.');
@@ -36,7 +42,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
       }
 
       onLogin(data.user);
-    } catch {
+    } catch (err) {
       setError('Cannot reach the server. Make sure the backend is running.');
     } finally {
       setLoading(false);
