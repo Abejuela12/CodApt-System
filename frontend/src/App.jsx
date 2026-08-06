@@ -269,17 +269,19 @@ function App() {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
-        setProgress(prev => {
-          const merged = mergeProgress(prev, data);
-          saveStoredProgress(userId, merged);
-          return merged;
-        });
+        setProgress(data);
+        saveStoredProgress(userId, data);
       }
       // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
       return true;
     } catch (err) {
       console.error('Failed to load progress:', err);
+      if (userId && Object.keys(cachedProgress).length > 0) {
+        setProgress(cachedProgress);
+      } else {
+        setProgress({});
+      }
       return false;
     } finally {
       setProgressLoading(false);
