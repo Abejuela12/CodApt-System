@@ -1,16 +1,16 @@
 // server.js
 require('dotenv').config();
-const express    = require('express');
-const cors       = require('cors');
-const crypto     = require('crypto');
-const { exec }   = require('child_process');
-const fs         = require('fs');
-const path       = require('path');
-const os         = require('os');
-const db         = require('./db');
-const { validateCFG }       = require('./utils/cfgValidator');
+const express = require('express');
+const cors = require('cors');
+const crypto = require('crypto');
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const db = require('./db');
+const { validateCFG } = require('./utils/cfgValidator');
 const { recommendExercise } = require('./utils/cosineSimilarity');
-const { CARTClassifier }    = require('./utils/cartModel');
+const { CARTClassifier } = require('./utils/cartModel');
 const { getFallbackProblems, resolveProblemMetadata } = require('./utils/problemCatalog');
 const { startInteractiveSession, writeToInteractiveSession, getInteractiveSessionOutput, removeInteractiveSession } = require('./utils/runCode');
 
@@ -70,17 +70,17 @@ function hashPassword(password) {
 ───────────────────────────────────── */
 function cartLevelToTier(cartLevel) {
   const map = {
-    Easy:         'Beginner',
+    Easy: 'Beginner',
     Intermediate: 'Intermediate',
-    Hard:         'Advanced',
+    Hard: 'Advanced',
   };
   return map[cartLevel] || 'Beginner';
 }
 
 function shouldDemote(profile, isCorrect, attempts, hintUsed, hasHardEvidence) {
   if (hasHardEvidence) return false;
-  const struggled    = !isCorrect || hintUsed || attempts >= 3;
-  const weakProfile  = profile.success_rate < 0.50;
+  const struggled = !isCorrect || hintUsed || attempts >= 3;
+  const weakProfile = profile.success_rate < 0.50;
   return struggled && weakProfile;
 }
 
@@ -141,7 +141,7 @@ function runProcess(command, filePath, res) {
 }
 
 function cleanup(filePath) {
-  try { fs.unlinkSync(filePath); } catch (_) {}
+  try { fs.unlinkSync(filePath); } catch (_) { }
 }
 
 function wrapJava(code) {
@@ -171,8 +171,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (existing.length > 0)
       return res.status(409).json({ error: 'An account with this email already exists.' });
 
-    const hashed          = hashPassword(password);
-    const displayName     = name     || email.split('@')[0];
+    const hashed = hashPassword(password);
+    const displayName = name || email.split('@')[0];
     const displayUsername = username || email.split('@')[0];
 
     // SUPABASE (pg): use RETURNING id to get the inserted row's id
@@ -185,11 +185,11 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(201).json({
       success: true,
       user: {
-        id:       result[0].id,
-        name:     displayName,
+        id: result[0].id,
+        name: displayName,
         username: displayUsername,
         email,
-        photo:    photo || null
+        photo: photo || null
       }
     });
   } catch (err) {
@@ -220,11 +220,11 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({
       success: true,
       user: {
-        id:       user.id,
-        name:     user.name,
+        id: user.id,
+        name: user.name,
         username: user.username,
-        email:    user.email,
-        photo:    user.photo || null
+        email: user.email,
+        photo: user.photo || null
       }
     });
   } catch (err) {
@@ -253,11 +253,11 @@ app.post('/api/auth/google', async (req, res) => {
       return res.json({
         success: true,
         user: {
-          id:       user.id,
-          name:     user.name,
+          id: user.id,
+          name: user.name,
           username: user.username,
-          email:    user.email,
-          photo:    user.photo || null
+          email: user.email,
+          photo: user.photo || null
         }
       });
     }
@@ -274,11 +274,11 @@ app.post('/api/auth/google', async (req, res) => {
     res.status(201).json({
       success: true,
       user: {
-        id:       result[0].id,
-        name:     name || username,
+        id: result[0].id,
+        name: name || username,
         username,
         email,
-        photo:    photo || null
+        photo: photo || null
       }
     });
   } catch (err) {
@@ -293,12 +293,12 @@ app.put('/api/auth/profile/:userId', async (req, res) => {
     const { name, username, email, password, photo } = req.body;
     const fields = [];
     const values = [];
-    let   idx    = 1; // SUPABASE (pg): numbered placeholders start at $1
+    let idx = 1; // SUPABASE (pg): numbered placeholders start at $1
 
-    if (name)                { fields.push(`name = $${idx++}`);          values.push(name); }
-    if (username)            { fields.push(`username = $${idx++}`);      values.push(username); }
-    if (email)               { fields.push(`email = $${idx++}`);         values.push(email); }
-    if (photo !== undefined) { fields.push(`photo = $${idx++}`);         values.push(photo); }
+    if (name) { fields.push(`name = $${idx++}`); values.push(name); }
+    if (username) { fields.push(`username = $${idx++}`); values.push(username); }
+    if (email) { fields.push(`email = $${idx++}`); values.push(email); }
+    if (photo !== undefined) { fields.push(`photo = $${idx++}`); values.push(photo); }
     if (password && password !== '••••••••') {
       fields.push(`password_hash = $${idx++}`);
       values.push(hashPassword(password));
@@ -345,7 +345,7 @@ app.delete('/api/auth/delete-account/:userId', async (req, res) => {
 
     // Delete user account
     const userResult = await db.query('DELETE FROM users WHERE id = $1', [userId]);
-    
+
     if (!userResult || userResult.rowCount === 0) {
       return res.status(404).json({ success: false, error: 'Account not found.' });
     }
@@ -418,14 +418,14 @@ app.post('/api/submit', async (req, res) => {
       problem = resolveProblemMetadata(problemId) || {};
     }
     const requiredConstruct = problem.required_construct || null;
-    const expectedOutput    = problem.expected_output    || '';
+    const expectedOutput = problem.expected_output || '';
 
     // ── 2. CFG validation ────────────────────────────────────────
-    const cfgResult        = validateCFG(code, language, requiredConstruct, expectedOutput);
-    const syntaxErrors     = cfgResult.syntaxErrors;
+    const cfgResult = validateCFG(code, language, requiredConstruct, expectedOutput);
+    const syntaxErrors = cfgResult.syntaxErrors;
     const structuralErrors = cfgResult.structuralErrors;
-    const cfgFeedback      = cfgResult.feedback;
-    const constructUsed    = cfgResult.constructUsed;
+    const cfgFeedback = cfgResult.feedback;
+    const constructUsed = cfgResult.constructUsed;
 
     // ── 3. Final correctness ─────────────────────────────────────
     const finalCorrect = isCorrect && constructUsed;
@@ -532,10 +532,10 @@ app.post('/api/submit', async (req, res) => {
     );
 
     const profile = profileRows[0] ?? {
-      success_rate:      successValue,
-      avg_time_spent:    timeSpent,
-      avg_attempts:      attempts,
-      syntax_errors:     syntaxErrors,
+      success_rate: successValue,
+      avg_time_spent: timeSpent,
+      avg_attempts: attempts,
+      syntax_errors: syntaxErrors,
       structural_errors: structuralErrors,
       performance_level: 'Easy'
     };
@@ -586,11 +586,11 @@ app.post('/api/submit', async (req, res) => {
 
     // ── CART ML classification ────────────────────────────────────
     const featureVector = {
-      success_rate:      profile.success_rate      ?? 0,
-      avg_attempts:      profile.avg_attempts      ?? attempts,
-      avg_time_spent:    profile.avg_time_spent     ?? timeSpent,
-      syntax_errors:     profile.syntax_errors      ?? syntaxErrors,
-      structural_errors: profile.structural_errors  ?? structuralErrors,
+      success_rate: profile.success_rate ?? 0,
+      avg_attempts: profile.avg_attempts ?? attempts,
+      avg_time_spent: profile.avg_time_spent ?? timeSpent,
+      syntax_errors: profile.syntax_errors ?? syntaxErrors,
+      structural_errors: profile.structural_errors ?? structuralErrors,
     };
 
     let level;
@@ -599,9 +599,9 @@ app.post('/api/submit', async (req, res) => {
       console.log(`🌳 CART predicted level="${level}" for user=${userId} concept=${concept}`);
     } else {
       if (
-        featureVector.success_rate      >= 0.80 &&
-        featureVector.avg_attempts      <= 2    &&
-        featureVector.syntax_errors     <= 1    &&
+        featureVector.success_rate >= 0.80 &&
+        featureVector.avg_attempts <= 2 &&
+        featureVector.syntax_errors <= 1 &&
         featureVector.structural_errors <= 1
       ) {
         level = 'Hard';
@@ -622,16 +622,16 @@ app.post('/api/submit', async (req, res) => {
       );
     }
 
-    let nextTier   = cartLevelToTier(level);
+    let nextTier = cartLevelToTier(level);
     let tierReason = null;
 
     if (nextTier === 'Advanced' && shouldDemote(profile, finalCorrect, attempts, hintUsed, hasHardEvidence)) {
-      nextTier   = 'Intermediate';
+      nextTier = 'Intermediate';
       tierReason = 'We are giving you an Intermediate exercise to strengthen this concept before continuing with Advanced problems.';
     }
 
     if (nextTier === 'Intermediate' && shouldDemoteToEasy(profile, attempts, structuralErrors)) {
-      nextTier   = 'Beginner';
+      nextTier = 'Beginner';
       tierReason = 'We are revisiting the fundamentals of this concept to build a stronger foundation.';
     }
 
@@ -700,16 +700,16 @@ app.post('/api/submit', async (req, res) => {
        FROM user_profiles WHERE user_id = $1 AND language = $2 AND concept = $3`,
       [userId, language, concept]
     );
-    const mr         = masterCheck[0];
+    const mr = masterCheck[0];
     const isMastered = mr
       ? mr.tasks_completed >= mr.total_tasks && (mr.success_rate * 100) >= 60
       : false;
 
     res.json({
-      success:         true,
+      success: true,
       level,
       nextTier,
-      correct:         finalCorrect,
+      correct: finalCorrect,
       syntaxErrors,
       structuralErrors,
       cfgFeedback,
@@ -717,15 +717,15 @@ app.post('/api/submit', async (req, res) => {
       isMastered,
       recommendation: recommended
         ? {
-            id:              recommended.id,
-            title:           recommended.title,
-            concept:         recommended.concept,
-            difficulty:      recommended.difficulty,
-            problem_tier:    recommended.problem_tier,
-            language:        recommended.language,
-            similarityScore,
-            explanation
-          }
+          id: recommended.id,
+          title: recommended.title,
+          concept: recommended.concept,
+          difficulty: recommended.difficulty,
+          problem_tier: recommended.problem_tier,
+          language: recommended.language,
+          similarityScore,
+          explanation
+        }
         : null
     });
 
@@ -795,16 +795,16 @@ app.get('/api/progress/:userId', async (req, res) => {
     rows.forEach(row => {
       if (!progress[row.language]) progress[row.language] = {};
       const tasksCompleted = row.tasks_completed;
-      const totalTasks     = row.total_tasks;
-      const successRate    = Math.round(row.success_rate * 100);
+      const totalTasks = row.total_tasks;
+      const successRate = Math.round(row.success_rate * 100);
       progress[row.language][row.concept] = {
         tasksCompleted,
         totalTasks,
         successRate,
         performanceLevel: row.performance_level,
-        syntaxErrors:     row.syntax_errors,
+        syntaxErrors: row.syntax_errors,
         structuralErrors: row.structural_errors,
-        mastered:         tasksCompleted >= totalTasks && successRate >= 60,
+        mastered: tasksCompleted >= totalTasks && successRate >= 60,
       };
     });
     res.json(progress);
@@ -927,7 +927,7 @@ app.get('/api/admin/users', async (req, res) => {
       const demoProgressColor = (() => {
         const mappings = {
           demo_average: '#10b981',
-          demo_full:    '#3b82f6',
+          demo_full: '#3b82f6',
           demo_quarter: '#f59e0b'
         };
         return mappings[user.username] || undefined;
@@ -998,12 +998,12 @@ app.get('/api/admin/content', async (req, res) => {
       name: row.language,
       icon: row.language === 'Python' ? '🐍'
         : row.language === 'JavaScript' ? '📜'
-        : row.language === 'Java' ? '☕'
-        : '💻',
+          : row.language === 'Java' ? '☕'
+            : '💻',
       color: row.language === 'Python' ? '#3776AB'
         : row.language === 'JavaScript' ? '#F7DF1E'
-        : row.language === 'Java' ? '#007396'
-        : '#5A67D8',
+          : row.language === 'Java' ? '#007396'
+            : '#5A67D8',
       courses: Number(row.courses),
       students: Number(row.students),
     }));
@@ -1069,26 +1069,26 @@ app.post('/api/admin/problems', async (req, res) => {
   }
 });
 
-  app.put('/api/admin/problems/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const {
-        title,
-        language,
-        concept,
-        difficulty,
-        problem_tier,
-        instruction,
-        expected_output,
-        archived
-      } = req.body;
+app.put('/api/admin/problems/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      language,
+      concept,
+      difficulty,
+      problem_tier,
+      instruction,
+      expected_output,
+      archived
+    } = req.body;
 
-      if (!title || !language || !concept || !difficulty || !problem_tier) {
-        return res.status(400).json({ error: 'Missing required problem fields.' });
-      }
+    if (!title || !language || !concept || !difficulty || !problem_tier) {
+      return res.status(400).json({ error: 'Missing required problem fields.' });
+    }
 
-      const { rows } = await db.query(
-        `UPDATE problems SET
+    const { rows } = await db.query(
+      `UPDATE problems SET
            title = $1,
            language = $2,
            concept = $3,
@@ -1099,26 +1099,26 @@ app.post('/api/admin/problems', async (req, res) => {
            archived = COALESCE($8, archived)
          WHERE id = $9
          RETURNING id, title, language, concept, difficulty, problem_tier, instruction, expected_output, archived, created_at`,
-        [
-          title,
-          language,
-          concept,
-          difficulty,
-          problem_tier,
-          instruction || '',
-          expected_output || '',
-          archived,
-          id
-        ]
-      );
+      [
+        title,
+        language,
+        concept,
+        difficulty,
+        problem_tier,
+        instruction || '',
+        expected_output || '',
+        archived,
+        id
+      ]
+    );
 
-      if (!rows || rows.length === 0) return res.status(404).json({ error: 'Problem not found.' });
-      res.json(rows[0]);
-    } catch (err) {
-      console.error('❌ UPDATE ADMIN PROBLEM:', err.message);
-      res.status(500).json({ error: err.message });
-    }
-  });
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Problem not found.' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('❌ UPDATE ADMIN PROBLEM:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.patch('/api/admin/problems/:id/archive', async (req, res) => {
   try {
@@ -1494,7 +1494,7 @@ app.get('/api/admin/reports/download', async (req, res) => {
     csvContent += `Export Format,CSV\n`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Research_Report_${createdAt.getFullYear()}${(createdAt.getMonth()+1).toString().padStart(2,'0')}${createdAt.getDate().toString().padStart(2,'0')}_${createdAt.getHours().toString().padStart(2,'0')}${createdAt.getMinutes().toString().padStart(2,'0')}${createdAt.getSeconds().toString().padStart(2,'0')}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Research_Report_${createdAt.getFullYear()}${(createdAt.getMonth() + 1).toString().padStart(2, '0')}${createdAt.getDate().toString().padStart(2, '0')}_${createdAt.getHours().toString().padStart(2, '0')}${createdAt.getMinutes().toString().padStart(2, '0')}${createdAt.getSeconds().toString().padStart(2, '0')}.csv"`);
     res.send(csvContent);
   } catch (err) {
     console.error('❌ DOWNLOAD RESEARCH DATA:', err.message);
@@ -1571,11 +1571,11 @@ app.post('/api/retrain', async (req, res) => {
       cartReady = true;
       console.log('✅ CART model reloaded after retraining.');
       res.json({
-        success:    true,
+        success: true,
         trained_at: exported.meta.trained_at,
-        features:   exported.meta.features,
-        max_depth:  exported.meta.max_depth,
-        output:     stdout,
+        features: exported.meta.features,
+        max_depth: exported.meta.max_depth,
+        output: stdout,
       });
     } catch (loadErr) {
       res.status(500).json({ error: 'Model trained but failed to reload', details: loadErr.message });
@@ -1590,7 +1590,7 @@ app.post('/api/retrain', async (req, res) => {
 app.get('/api/cart-model', (req, res) => {
   if (!cartReady) {
     return res.status(503).json({
-      ready:   false,
+      ready: false,
       message: 'CART model not loaded. Run: node utils/trainCart.js',
     });
   }
@@ -1617,7 +1617,7 @@ app.get('/api/test', async (req, res) => {
 app.put('/api/admin/profile', async (req, res) => {
   try {
     const { name, username, email } = req.body;
-    
+
     if (!name || !username || !email) {
       return res.status(400).json({ error: 'Name, username, and email are required.' });
     }
@@ -1672,4 +1672,8 @@ app.get('/api/admin/profile', async (req, res) => {
    START SERVER
 ══════════════════════════════════════ */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Backend running at http://localhost:${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`🚀 Backend running at http://localhost:${PORT}`));
+}
+
+module.exports = app;

@@ -8,6 +8,7 @@ import LandingPage from './components/LandingPage/LandingPage';
 import SignUp from './components/LogIn/SignUp';
 import Login from './components/LogIn/Login';
 import ChooseLevelModal from './components/Cards/ChooseLevelModal';
+import AdminDashboard from './components/Admin-Dashboard/AdminDashboard';
 import { API_BASE_URL } from './config';
 import './App.css';
 
@@ -292,16 +293,16 @@ function App() {
   const handleSignUp = async (user) => {
     setUserData(user);
     setSavedTaskIndices(readStoredTaskIndices(user?.id));
-    const loaded = await fetchAndSetProgress(user?.id);
-    if (loaded) goToLanguages();
+    await fetchAndSetProgress(user?.id);
+    goToLanguages();
   };
 
   const handleLogin = async (loginData) => {
     if (loginData?.isAdmin) { setIsAdmin(true); goToAdmin(); return; }
     setUserData(loginData);
     setSavedTaskIndices(readStoredTaskIndices(loginData?.id));
-    const loaded = await fetchAndSetProgress(loginData?.id);
-    if (loaded) goToLanguages();
+    await fetchAndSetProgress(loginData?.id);
+    goToLanguages();
   };
 
   if (currentPage === 'landing') return (

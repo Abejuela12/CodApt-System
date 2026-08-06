@@ -87,7 +87,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
         const errorText = await res.text().catch(() => 'Unable to read error message');
         throw new Error(`Failed to export data (${res.status} ${res.statusText}): ${errorText}`);
       }
-      
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -124,7 +124,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error('Failed to reset data');
-      
+
       const data = await res.json();
       alert(`✅ Experiment data reset successfully!\n\nDeleted:\n- ${data.deletedSubmissions} submissions\n- ${data.deletedProfiles} user profiles\n- ${data.deletedProgress} progress records`);
     } catch (err) {
@@ -156,7 +156,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
         <form onSubmit={handleSubmit} className={styles.profileForm}>
           <div className={styles.formSection}>
             <h2 className={styles.sectionTitle}>Account Information</h2>
-            
+
             <div className={styles.formGrid}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>
@@ -217,10 +217,10 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
       {/* System Control Section */}
       <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <FaGear className={styles.headerIcon} /> 
+          <FaGear className={styles.headerIcon} />
           <span>System Control</span>
         </div>
-        
+
         <div className={styles.settingItem}>
           <div className={styles.settingText}>
             <h3>Recommendation Engine</h3>
@@ -258,21 +258,21 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
       {/* Data & Research Controls Section */}
       <div className={styles.card}>
         <div className={styles.cardHeader}>
-          <FaFloppyDisk className={styles.headerIcon} /> 
+          <FaFloppyDisk className={styles.headerIcon} />
           <span>Data & Research Controls</span>
         </div>
         <div className={styles.actionGrid}>
           <div className={styles.actionButton} onClick={handleExportCSV} style={{ cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.6 : 1 }}>
             <div className={styles.btnContent}>
-               <FaFloppyDisk className={styles.actionIcon} />
-               <span>{isLoading ? 'Exporting...' : 'Export Data (CSV)'}</span>
+              <FaFloppyDisk className={styles.actionIcon} />
+              <span>{isLoading ? 'Exporting...' : 'Export Data (CSV)'}</span>
             </div>
             <FaChevronRight className={styles.chevron} />
           </div>
           <div className={styles.actionButton} onClick={handleResetExperimentData} style={{ cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.6 : 1 }}>
             <div className={styles.btnContent}>
-               <FaArrowRotateLeft className={styles.actionIcon} />
-               <span>Reset Experiment Data</span>
+              <FaArrowRotateLeft className={styles.actionIcon} />
+              <span>Reset Experiment Data</span>
             </div>
             <FaChevronRight className={styles.chevron} />
           </div>

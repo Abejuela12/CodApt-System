@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell 
+  PieChart, Pie, Cell
 } from 'recharts';
 import styles from './AdminReports.module.css';
 import { API_BASE_URL } from '../../config';
@@ -48,7 +48,7 @@ const AdminReports = () => {
       const params = new URLSearchParams({ timeframe: selectedTimeframe, user: selectedUser });
       const res = await fetch(`${API_BASE_URL}/api/admin/reports/download?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to download report');
-      
+
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -72,7 +72,7 @@ const AdminReports = () => {
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Reports</h1>
-      
+
       <div className={styles.filterBar}>
         <select className={styles.dropdown}
           value={selectedTimeframe}
@@ -105,7 +105,7 @@ const AdminReports = () => {
       <div className={styles.statsRow}>
         <div className={styles.statCard}>
           <div className={styles.statIconWrapper}>
-            <div className={styles.iconCircle} style={{backgroundColor: '#E6F4EA'}}>📈</div>
+            <div className={styles.iconCircle} style={{ backgroundColor: '#E6F4EA' }}>📈</div>
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Avg Score</span>
@@ -114,7 +114,7 @@ const AdminReports = () => {
         </div>
         <div className={styles.statCard}>
           <div className={styles.statIconWrapper}>
-            <div className={styles.iconCircle} style={{backgroundColor: '#E6F4EA'}}>✅</div>
+            <div className={styles.iconCircle} style={{ backgroundColor: '#E6F4EA' }}>✅</div>
           </div>
           <div className={styles.statInfo}>
             <span className={styles.statLabel}>Average Progress</span>
