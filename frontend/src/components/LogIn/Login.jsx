@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import styles from './SignUp.module.css';
 import ThemeToggle from '../shared/ThemeToggle';
 
+import { API_BASE_URL } from '../../config';
+
 const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
   const [formData, setFormData]           = useState({ email: '', password: '' });
   const [error, setError]                 = useState('');
@@ -21,7 +23,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
     setLoading(true);
 
     try {
-      const res  = await fetch('http://localhost:5000/api/auth/login', {
+      const res  = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ email: formData.email, password: formData.password }),

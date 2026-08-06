@@ -7,6 +7,8 @@ import ThemeToggle from '../shared/ThemeToggle';
  
 // ────────────────────────────────────────────────────────────────────────────
 
+import { API_BASE_URL } from '../../config';
+
 const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
   const [formData, setFormData]           = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError]                 = useState('');
@@ -32,7 +34,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
     setLoading(true);
 
     try {
-      const res  = await fetch('http://localhost:5000/api/auth/register', {
+      const res  = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({

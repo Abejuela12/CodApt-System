@@ -8,9 +8,11 @@ import {
 import { getConceptLevel } from '../../utils/levelUtils';
 import { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress } from './profileLogic';
 
+import { API_BASE_URL } from '../../config';
+
 const LANGUAGES = DEFAULT_LANGUAGES;
 const CONCEPTS  = DEFAULT_CONCEPTS;
-const API       = 'http://localhost:5000';
+const API       = API_BASE_URL;
 
 const mergeProgressData = (existing = {}, fresh = {}) => {
   const merged = { ...(existing || {}) };

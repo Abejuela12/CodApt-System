@@ -62,7 +62,7 @@ function startInteractiveSession({ language, code }) {
       const filePath = path.join(tmpDir, `codapt_${Date.now()}_${Math.random().toString(16).slice(2)}.py`);
       session.filePath = filePath;
       fs.writeFileSync(filePath, code, 'utf8');
-      attachChild(spawn('python', [filePath], { cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'] }));
+      attachChild(spawn('python', ['-u', filePath], { cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'] }));
       resolve({ sessionId, output: '', status: 'running' });
       return;
     }

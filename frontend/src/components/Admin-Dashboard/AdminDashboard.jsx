@@ -4,6 +4,7 @@ import styles from './AdminDashboard.module.css';
 import UsersPanel from '../Admin-Users/AdminUsers';
 import AdminReports from '../Admin-Reports/AdminReports';
 import AdminSettings from '../Admin-Settings/AdminSettings';
+import { API_BASE_URL } from '../../config';
 import AdminCourses from '../Admin-Courses/AdminCourses';
 
 const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onLogout }) => {
@@ -25,7 +26,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
   useEffect(() => {
     const fetchAdminUsers = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/admin/users');
+        const response = await fetch(`${API_BASE_URL}/api/admin/users`);
         if (!response.ok) throw new Error('Failed to load admin users');
         const data = await response.json();
         setUsers(data);
@@ -39,7 +40,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
 
     const fetchDashboardMetrics = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/admin/reports');
+        const response = await fetch(`${API_BASE_URL}/api/admin/reports`);
         if (!response.ok) throw new Error('Failed to load dashboard metrics');
         const data = await response.json();
         setAvgScore(data.avgScore || 0);

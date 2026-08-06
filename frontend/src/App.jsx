@@ -8,7 +8,7 @@ import LandingPage from './components/LandingPage/LandingPage';
 import SignUp from './components/LogIn/SignUp';
 import Login from './components/LogIn/Login';
 import ChooseLevelModal from './components/Cards/ChooseLevelModal';
-import AdminDashboard from './components/Admin-Dashboard/AdminDashboard';
+import { API_BASE_URL } from './config';
 import './App.css';
 
 const EMPTY_USER = {
@@ -152,7 +152,7 @@ function App() {
   const handleSaveProfile = async (formData) => {
     if (!userData.id) { setUserData(formData); return; }
     try {
-      const res  = await fetch(`http://localhost:5000/api/auth/profile/${userData.id}`, {
+      const res  = await fetch(`${API_BASE_URL}/api/auth/profile/${userData.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
@@ -199,7 +199,7 @@ function App() {
     if (!userData?.id) throw new Error('User ID not found.');
 
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/delete-account/${userData.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/delete-account/${userData.id}`, {
         method: 'DELETE'
       });
 
@@ -266,7 +266,7 @@ function App() {
 
     setProgressLoading(true);
     try {
-      const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
+      const res  = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
         setProgress(prev => {
@@ -418,7 +418,7 @@ function App() {
 
               // Background sync for accurate data (profile chart, etc.)
               if (userData?.id) {
-                fetch(`http://localhost:5000/api/progress/${userData.id}`)
+                fetch(`${API_BASE_URL}/api/progress/${userData.id}`)
                   .then(r => r.json())
                   .then(data => setProgress(prev => mergeProgress(prev, data)))
                   .catch(() => {});

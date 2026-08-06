@@ -875,12 +875,22 @@ app.get('/api/admin/users', async (req, res) => {
         };
       });
 
+      const demoProgressColor = (() => {
+        const mappings = {
+          demo_average: '#10b981',
+          demo_full:    '#3b82f6',
+          demo_quarter: '#f59e0b'
+        };
+        return mappings[user.username] || undefined;
+      })();
+
       return {
         id: user.id,
         name: user.name,
         username: user.username,
         email: user.email,
         photo: user.photo || null,
+        color: demoProgressColor,
         progress: Number(user.progress),
         completedLessons: Number(user.tasks_completed),
         certificates: Number(user.concepts_count),

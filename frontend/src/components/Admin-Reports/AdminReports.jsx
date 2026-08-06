@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell 
 } from 'recharts';
 import styles from './AdminReports.module.css';
+import { API_BASE_URL } from '../../config';
 
 const AdminReports = () => {
   const [performanceData, setPerformanceData] = useState([]);
@@ -21,7 +22,7 @@ const AdminReports = () => {
     setFetchError('');
     try {
       const params = new URLSearchParams({ timeframe: selectedTimeframe, user: selectedUser });
-      const res = await fetch(`http://localhost:5000/api/admin/reports?${params.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/admin/reports?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load admin reports');
       const data = await res.json();
 
@@ -45,7 +46,7 @@ const AdminReports = () => {
   const downloadReport = async () => {
     try {
       const params = new URLSearchParams({ timeframe: selectedTimeframe, user: selectedUser });
-      const res = await fetch(`http://localhost:5000/api/admin/reports/download?${params.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/api/admin/reports/download?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to download report');
       
       const blob = await res.blob();

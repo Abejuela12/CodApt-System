@@ -8,6 +8,7 @@ import { calculateLanguageProgress, getLanguageLevel } from "../../utils/levelUt
 import { getHintLevel } from "../../utils/hintUtils";
 import { recommendNextTask } from "../../utils/recommendNextTask";
 import { normalizeOutput, normalizeTerminalOutput, extractEffectiveOutput, isOutputMatch } from "../../utils/outputMatching";
+import { API_BASE_URL } from "../../config";
 
 // ── Mastery fanfare using Web Audio API (no external files needed) ──
 function playMasterySound() {
@@ -176,9 +177,9 @@ const CodeEditor = ({
     setOutput('⏳ Running...');
     try {
       if (terminalSessionId) {
-        await fetch(`http://localhost:5000/api/terminal/${terminalSessionId}`, { method: 'DELETE' });
+        await fetch(`${API_BASE_URL}/api/terminal/${terminalSessionId}`, { method: 'DELETE' });
       }
-      const res  = await fetch('http://localhost:5000/api/run', {
+      const res  = await fetch(`${API_BASE_URL}/api/run`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ language, code })
       });
@@ -220,7 +221,7 @@ const CodeEditor = ({
           xtermRef.current.writeln('❌ No active terminal session. Press Run again to restart.');
           return;
         }
-        const res = await fetch('http://localhost:5000/api/terminal/input', {
+        const res = await fetch(`${API_BASE_URL}/api/terminal/input`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId, input: value })
         });
@@ -266,7 +267,7 @@ const CodeEditor = ({
       let runtimeError = false;
 
       if (!terminalSessionId) {
-        const runRes  = await fetch('http://localhost:5000/api/run', {
+        const runRes  = await fetch(`${API_BASE_URL}/api/run`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ language, code })
         });
@@ -317,7 +318,7 @@ const CodeEditor = ({
       const actual    = extractEffectiveOutput(actualRaw, expected);
       const isCorrect = isOutputMatch(actualOutput, task.expected_output || '');
 
-      const submitRes  = await fetch('http://localhost:5000/api/submit', {
+      const submitRes  = await fetch(`${API_BASE_URL}/api/submit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: userData?.id ?? null,
@@ -403,7 +404,7 @@ const CodeEditor = ({
     const fetchTasks = async () => {
       setTasksLoading(true);
       try {
-        const res  = await fetch(`http://localhost:5000/api/problems/${language}/${concept}/${level}?tier=${currentTier}`);
+        const res  = await fetch(`${API_BASE_URL}/api/problems/${language}/${concept}/${level}?tier=${currentTier}`);
         const data = await res.json();
         setTasks(data);
       } catch (err) {
@@ -463,7 +464,7 @@ const CodeEditor = ({
 
     const intervalId = window.setInterval(async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/terminal/${terminalSessionId}`);
+        const res = await fetch(`${API_BASE_URL}/api/terminal/${terminalSessionId}`);
         const data = await res.json();
         if (data.output && xtermRef.current) {
           xtermRef.current.write(data.output.replace(/\n/g, '\r\n'));

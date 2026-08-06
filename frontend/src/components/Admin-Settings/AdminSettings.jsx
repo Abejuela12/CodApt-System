@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styles from './AdminSettings.module.css';
+import { API_BASE_URL } from '../../config';
 import { FaGear, FaFloppyDisk, FaArrowRotateLeft, FaChevronRight, FaShield, FaUser, FaEnvelope } from "react-icons/fa6";
 
 const AdminSettings = ({ userData = {}, onLogout }) => {
@@ -16,8 +17,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
   const [showToast, setShowToast] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-  const API_BASE = API_BASE_URL || 'http://localhost:5000';
+  const API_BASE = API_BASE_URL;
 
   useEffect(() => {
     const fetchAdminProfile = async () => {
@@ -49,7 +49,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const res = await fetch('http://localhost:5000/api/admin/profile', {
+      const res = await fetch(`${API_BASE_URL}/api/admin/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
