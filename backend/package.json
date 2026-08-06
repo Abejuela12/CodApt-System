@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-    "scripts": {
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
     "test:cfg": "node cfgValidator.test.js",
     "test:cosine": "node utils/testCosineSimilarity.js",
     "test:catalog": "node utils/problemCatalog.test.js",
