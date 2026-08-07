@@ -271,20 +271,24 @@ function App() {
 
     if (!userId) {
       setProgressLoading(false);
-      return false;
+      return true;
     }
 
     setProgressLoading(true);
     try {
       const res  = await fetch(`http://localhost:5000/api/progress/${userId}`);
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        // Merge server data with any locally cached progress so the client
-        // doesn't lose recent offline/local updates. Prefer the higher
-        // tasksCompleted/successRate values.
-        const merged = mergeProgress(data, cachedProgress || {});
-        setProgress(merged);
-        saveStoredProgress(userId, merged);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          // Merge server data with any locally cached progress so the client
+          // doesn't lose recent offline/local updates. Prefer the higher
+          // tasksCompleted/successRate values.
+          const merged = mergeProgress(data, cachedProgress || {});
+          setProgress(merged);
+          saveStoredProgress(userId, merged);
+        }
+      } else {
+        console.warn('Failed to load progress:', res.status, res.statusText);
       }
 
       // Also restore task indices after loading progress
@@ -297,7 +301,7 @@ function App() {
       } else {
         setProgress({});
       }
-      return false;
+      return true;
     } finally {
       setProgressLoading(false);
       setProgressLoaded(true);
