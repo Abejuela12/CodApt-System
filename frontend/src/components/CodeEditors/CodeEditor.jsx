@@ -318,10 +318,16 @@ const CodeEditor = ({
       const actual    = extractEffectiveOutput(actualRaw, expected);
       const isCorrect = isOutputMatch(actualOutput, task.expected_output || '');
 
-      const submitRes  = await fetch(`${API_BASE_URL}/api/submit`, {
+      if (!userData?.id) {
+        alert('Please log in before submitting answers so progress can be saved.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const submitRes = await fetch(`${API_BASE_URL}/api/submit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: userData?.id ?? null,
+          userId: userData.id,
           problemId: task.id, language, concept, code,
           attempts: newAttempts, timeSpent: timeSpentSeconds,
           isCorrect, hintUsed

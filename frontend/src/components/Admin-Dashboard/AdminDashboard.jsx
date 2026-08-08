@@ -23,43 +23,52 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
     : location.pathname.includes('/admin/settings') ? 'settings'
     : 'dashboard';
 
+  const fetchAdminUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/users', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load admin users');
+      const data = await response.json();
+      setUsers(data);
+      setError(null);
+    } catch (err) {
+      console.error('Admin fetch error:', err);
+      setError('Unable to load admin users from the backend.');
+      setUsers([]);
+    }
+  };
+
+  const fetchDashboardMetrics = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/reports', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to load dashboard metrics');
+      const data = await response.json();
+      setAvgScore(data.avgScore || 0);
+      setAvgProgress(data.avgProgress || 0);
+    } catch (err) {
+      console.error('Admin metrics fetch error:', err);
+    }
+  };
+
+  const loadDashboardData = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([fetchAdminUsers(), fetchDashboardMetrics()]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAdminUsers = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/users`);
-        if (!response.ok) throw new Error('Failed to load admin users');
-        const data = await response.json();
-        setUsers(data);
-        setError(null);
-      } catch (err) {
-        console.error('Admin fetch error:', err);
-        setError('Unable to load admin users from the backend.');
-        setUsers([]);
-      }
-    };
-
-    const fetchDashboardMetrics = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/admin/reports`);
-        if (!response.ok) throw new Error('Failed to load dashboard metrics');
-        const data = await response.json();
-        setAvgScore(data.avgScore || 0);
-        setAvgProgress(data.avgProgress || 0);
-      } catch (err) {
-        console.error('Admin metrics fetch error:', err);
-      }
-    };
-
-    const loadDashboardData = async () => {
-      setIsLoading(true);
-      try {
-        await Promise.all([fetchAdminUsers(), fetchDashboardMetrics()]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadDashboardData();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      loadDashboardData();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
   }, []);
 
   const handleNavClick = (view) => {
