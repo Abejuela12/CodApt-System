@@ -237,23 +237,33 @@ function App() {
   const goToProfile       = () => navigate('/profile');
   const goToAdminSettings = () => navigate('/admin/settings');
 
-  // Fetch progress from server and store it — called after login/signup
-  const mergeProgress = (existing = {}, fresh = {}) => {
-    const merged = { ...existing };
+  // Merge server and local cached progress. Prefer the highest-completed
+  // values (so local offline progress doesn't get overwritten by older
+  // server data). Also preserve mastered=true when present on either side.
+  const mergeProgress = (server = {}, local = {}) => {
+    const out = { ...server };
 
-    Object.entries(fresh || {}).forEach(([lang, concepts]) => {
-      merged[lang] = { ...existing[lang], ...concepts };
-    });
+    Object.entries(local || {}).forEach(([lang, concepts]) => {
+      out[lang] = out[lang] || {};
+      Object.entries(concepts || {}).forEach(([concept, localData]) => {
+        const serverData = (server[lang] && server[lang][concept]) || {};
+        const tasksCompleted = Math.max(Number(serverData.tasksCompleted || 0), Number(localData.tasksCompleted || 0));
+        const totalTasks = serverData.totalTasks || localData.totalTasks || 3;
+        const successRate = Math.max(Number(serverData.successRate || 0), Number(localData.successRate || 0));
+        const mastered = Boolean(serverData.mastered) || Boolean(localData.mastered) || (tasksCompleted >= totalTasks && successRate >= 60);
 
-    Object.entries(existing || {}).forEach(([lang, concepts]) => {
-      Object.entries(concepts || {}).forEach(([concept, data]) => {
-        if (data?.mastered) {
-          merged[lang] = { ...merged[lang], [concept]: { ...merged[lang]?.[concept], ...data } };
-        }
+        out[lang][concept] = {
+          ...serverData,
+          ...localData,
+          tasksCompleted,
+          totalTasks,
+          successRate,
+          mastered,
+        };
       });
     });
 
-    return merged;
+    return out;
   };
 
   const fetchAndSetProgress = async (userId) => {
@@ -268,17 +278,23 @@ function App() {
 
     if (!userId) {
       setProgressLoading(false);
-      return false;
+      return true;
     }
 
     setProgressLoading(true);
     try {
-      const res  = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
-      const data = await res.json();
-      if (data && typeof data === 'object') {
-        setProgress(data);
-        saveStoredProgress(userId, data);
+      const res = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          const merged = mergeProgress(data, cachedProgress || {});
+          setProgress(merged);
+          saveStoredProgress(userId, merged);
+        }
+      } else {
+        console.warn('Failed to load progress:', res.status, res.statusText);
       }
+
       // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
       return true;
@@ -289,7 +305,7 @@ function App() {
       } else {
         setProgress({});
       }
-      return false;
+      return true;
     } finally {
       setProgressLoading(false);
       setProgressLoaded(true);
