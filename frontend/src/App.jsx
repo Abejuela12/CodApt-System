@@ -125,17 +125,21 @@ function App() {
   }, [savedTaskIndices, userData?.id]);
 
   const saveTaskIndex = (lang, concept, index) => {
-    setSavedTaskIndices(prev => ({
-      ...prev,
-      [lang]: { ...prev[lang], [concept]: index }
-    }));
+    setSavedTaskIndices(prev => {
+      const next = {
+        ...prev,
+        [lang]: { ...prev[lang], [concept]: index }
+      };
+      if (userData?.id) saveStoredTaskIndices(userData.id, next);
+      return next;
+    });
   };
 
   const handleCompleteTask = (language, concept, taskId) => {
     setProgress(prev => {
       const existing = prev?.[language]?.[concept] || {};
       const totalTasks = existing.totalTasks || 3;
-      return {
+      const next = {
         ...prev,
         [language]: {
           ...prev[language],
@@ -147,6 +151,8 @@ function App() {
           }
         }
       };
+      if (userData?.id) saveStoredProgress(userData.id, next);
+      return next;
     });
   };
 

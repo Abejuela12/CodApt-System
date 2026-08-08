@@ -327,7 +327,11 @@ const CodeEditor = ({
           isCorrect, hintUsed
         })
       });
-      const submitData = await submitRes.json();
+      const submitData = await submitRes.json().catch(() => null);
+      if (!submitRes.ok) {
+        const message = submitData?.error || submitData?.message || `HTTP ${submitRes.status}`;
+        throw new Error(message);
+      }
       console.log('✅ Backend Response:', submitData);
 
       // Require agreement between server and client before treating as correct.

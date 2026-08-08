@@ -10,6 +10,14 @@ function buildSessionId() {
   return crypto.randomUUID();
 }
 
+// BUG FIX: "python" doesn't exist on Debian/Ubuntu-based hosts (Render, Docker, most CI).
+// Those environments only ship "python3". Windows dev machines typically only have
+// "python" (the py launcher aliases python3 there). This picks the right one per platform
+// instead of hardcoding "python", which is what caused "spawn python ENOENT" on Render/Vercel.
+function pythonExecutable() {
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
 function startInteractiveSession({ language, code }) {
   return new Promise((resolve) => {
     const sessionId = buildSessionId();
@@ -62,7 +70,7 @@ function startInteractiveSession({ language, code }) {
       const filePath = path.join(tmpDir, `codapt_${Date.now()}_${Math.random().toString(16).slice(2)}.py`);
       session.filePath = filePath;
       fs.writeFileSync(filePath, code, 'utf8');
-      attachChild(spawn('python', ['-u', filePath], { cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'] }));
+      attachChild(spawn(pythonExecutable(), ['-u', filePath], { cwd: tmpDir, stdio: ['pipe', 'pipe', 'pipe'] }));
       resolve({ sessionId, output: '', status: 'running' });
       return;
     }
