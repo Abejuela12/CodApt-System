@@ -25,7 +25,10 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
 
   const fetchAdminUsers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/admin/users', { cache: 'no-store' });
+      // BUG FIX: was hardcoded to http://localhost:5000, which only exists on a dev
+      // machine. Must go through API_BASE_URL so it resolves correctly in every
+      // deployed environment (Render backend in production/preview).
+      const response = await fetch(`${API_BASE_URL}/api/admin/users`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load admin users');
       const data = await response.json();
       setUsers(data);
@@ -39,7 +42,8 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
 
   const fetchDashboardMetrics = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/admin/reports', { cache: 'no-store' });
+      // BUG FIX: same hardcoded localhost issue as above.
+      const response = await fetch(`${API_BASE_URL}/api/admin/reports`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to load dashboard metrics');
       const data = await response.json();
       setAvgScore(data.avgScore || 0);
