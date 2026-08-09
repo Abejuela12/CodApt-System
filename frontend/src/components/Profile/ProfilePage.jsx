@@ -137,9 +137,11 @@ const ProfilePage = ({
     const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
     const isMastered     = hasData && isConceptMastered(propProgress, selectedLang, concept);
     const masteryPct     = hasData ? Math.round(success) : 0;
-    const lvl            = hasData
-      ? getConceptLevel({ tasksCompleted: isMastered ? 3 : Math.max(tasksCompleted, 1), totalTasks: 3, successRate: success })
-      : { label: 'Not Started', color: '#64748b' };
+    const lvl = !hasData
+      ? { label: 'Not Started', color: '#64748b' }
+      : isMastered
+        ? { label: 'Adv', color: '#22c55e' }
+        : getConceptLevel({ tasksCompleted: Math.max(tasksCompleted, 1), totalTasks: stored?.totalTasks || 3, successRate: success });
     return { concept, success, masteryPct, isMastered, hasData, lvl };
   });
 
