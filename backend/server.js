@@ -1693,6 +1693,37 @@ app.get('/api/test', async (req, res) => {
 });
 
 /* ══════════════════════════════════════
+   API — DEBUG: which database is this backend actually connected to?
+   GET /api/debug-db
+   Compare `databaseRef` below against Supabase's Project Settings →
+   General → Reference ID. If they don't match, this backend is reading
+   from a different Supabase project than the one you're checking in the
+   dashboard, which explains any data mismatch no matter how the app-level
+   logic is fixed. Never returns the password.
+══════════════════════════════════════ */
+app.get('/api/debug-db', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT current_database() AS database,
+              inet_server_addr()::text AS server_addr,
+              inet_server_port() AS server_port`
+    );
+    const rawUrl = process.env.DATABASE_URL || '';
+    // Extract just the host (after @, before the port/db) — never expose the password.
+    const hostMatch = rawUrl.match(/@([^:/]+)/);
+    const refMatch = rawUrl.match(/postgres\.([a-z0-9]+):/i);
+    res.json({
+      connectedTo: rows[0],
+      databaseUrlHost: hostMatch ? hostMatch[1] : 'unknown',
+      databaseRef: refMatch ? refMatch[1] : 'unknown',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+/* ══════════════════════════════════════
    ADMIN PROFILE — SAVE
    PUT /api/admin/profile
 ══════════════════════════════════════ */

@@ -237,35 +237,7 @@ function App() {
   const goToProfile       = () => navigate('/profile');
   const goToAdminSettings = () => navigate('/admin/settings');
 
-  // Merge server and local cached progress. Prefer the highest-completed
-  // values (so local offline progress doesn't get overwritten by older
-  // server data). Also preserve mastered=true when present on either side.
-  const mergeProgress = (server = {}, local = {}) => {
-    const out = { ...server };
-
-    Object.entries(local || {}).forEach(([lang, concepts]) => {
-      out[lang] = out[lang] || {};
-      Object.entries(concepts || {}).forEach(([concept, localData]) => {
-        const serverData = (server[lang] && server[lang][concept]) || {};
-        const tasksCompleted = Math.max(Number(serverData.tasksCompleted || 0), Number(localData.tasksCompleted || 0));
-        const totalTasks = serverData.totalTasks || localData.totalTasks || 3;
-        const successRate = Math.max(Number(serverData.successRate || 0), Number(localData.successRate || 0));
-        const mastered = Boolean(serverData.mastered) || Boolean(localData.mastered) || (tasksCompleted >= totalTasks && successRate >= 60);
-
-        out[lang][concept] = {
-          ...serverData,
-          ...localData,
-          tasksCompleted,
-          totalTasks,
-          successRate,
-          mastered,
-        };
-      });
-    });
-
-    return out;
-  };
-
+  // Fetch progress from server and store it — called after login/signup
   const fetchAndSetProgress = async (userId) => {
     setProgressLoaded(false);
 
@@ -278,23 +250,17 @@ function App() {
 
     if (!userId) {
       setProgressLoading(false);
-      return true;
+      return false;
     }
 
     setProgressLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data === 'object') {
-          const merged = mergeProgress(data, cachedProgress || {});
-          setProgress(merged);
-          saveStoredProgress(userId, merged);
-        }
-      } else {
-        console.warn('Failed to load progress:', res.status, res.statusText);
+      const res  = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        setProgress(data);
+        saveStoredProgress(userId, data);
       }
-
       // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
       return true;
@@ -305,7 +271,7 @@ function App() {
       } else {
         setProgress({});
       }
-      return true;
+      return false;
     } finally {
       setProgressLoading(false);
       setProgressLoaded(true);
@@ -418,34 +384,29 @@ function App() {
             if (nextIndex === 'Complete!') {
               const conceptName = masteredConcept || selectedConcept;
 
-              // ── Optimistic update: mark mastered BEFORE setSelectedConcept(null) ──
-              // ConceptModal mounts synchronously after that call, so progress must
-              // already reflect mastery or the lock won't appear until the async
-              // server fetch resolves (~200–500 ms later).
+              // Show the celebration UI immediately — this is purely cosmetic
+              // and does NOT get persisted as the source of truth. The real
+              // mastery state always comes from the server fetch below.
               setJustMasteredConcept(conceptName);
-              setProgress(prev => {
-                const existing = prev?.[selectedLang]?.[conceptName] || {};
-                return {
-                  ...prev,
-                  [selectedLang]: {
-                    ...prev[selectedLang],
-                    [conceptName]: {
-                      ...existing,
-                      tasksCompleted: existing.totalTasks || existing.tasksCompleted || 3,
-                      totalTasks:     existing.totalTasks || 3,
-                      // Ensure value meets the >= 60 mastery threshold in isMasteredConcept
-                      successRate:    Math.max(existing.successRate || 0, 60),
-                      mastered:       true,
-                    }
-                  }
-                };
-              });
 
-              // Background sync for accurate data (profile chart, etc.)
+              // Refresh progress from the server and REPLACE state outright.
+              // Previously this used mergeProgress(prev, data), which
+              // re-applied any stale `mastered: true` flag already sitting
+              // in local state ON TOP of the fresh server data — meaning a
+              // concept could look permanently "mastered" in the UI forever
+              // after a single optimistic guess, even if the database later
+              // showed it was never actually completed (e.g. 1/3 tasks).
+              // Always trusting the freshly-fetched server response, with no
+              // merge step, is what keeps the client honest with the DB.
               if (userData?.id) {
                 fetch(`${API_BASE_URL}/api/progress/${userData.id}`)
                   .then(r => r.json())
-                  .then(data => setProgress(prev => mergeProgress(prev, data)))
+                  .then(data => {
+                    if (data && typeof data === 'object') {
+                      setProgress(data);
+                      saveStoredProgress(userData.id, data);
+                    }
+                  })
                   .catch(() => {});
               }
 
