@@ -34,7 +34,7 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
     const fetchUsers = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${API_BASE_URL}/api/admin/users`);
+        const response = await fetch(`${API_BASE_URL}/api/admin/users`, { cache: 'no-store' });
         if (!response.ok) throw new Error('Failed to load admin users');
         const data = await response.json();
         setUsers(data.map(user => ({

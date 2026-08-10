@@ -54,7 +54,16 @@ function isConceptMastered(progress = {}, language, conceptName, threshold = DEF
   if (data.mastered === true || data.isMastered === true) return true;
 
   const tasksCompleted = data.tasksCompleted ?? 0;
+  // IMPORTANT: use `??` fallback ONLY for null/undefined, but then explicitly
+  // reject totalTasks <= 0. A stored value of 0 (from legacy/corrupted rows,
+  // e.g. before the per-tier total_tasks fix) must NEVER be treated as
+  // "trivially satisfied" — that previously let `tasksCompleted >= 0` pass
+  // for any value, causing the client to show a concept as mastered while
+  // the admin panel's SQL (which correctly requires total_tasks > 0)
+  // excluded the same row. This keeps both views permanently in agreement.
   const totalTasks = data.totalTasks ?? 3;
+  if (!totalTasks || totalTasks <= 0) return false;
+
   const successRate = data.successRate ?? 0;
 
   // Only consider a concept mastered once the user has completed all tasks
