@@ -892,21 +892,60 @@ app.get('/api/admin/users', async (req, res) => {
        ORDER BY u.name ASC`
     );
 
-    const TOTAL_POSSIBLE_CONCEPTS = 24; // 8 concepts × 3 languages
+    const TOTAL_POSSIBLE_CONCEPTS = 24; // 8 canonical concepts × 3 canonical languages
+    const CANONICAL_CONCEPTS = ['Variables', 'Data Types', 'Operators', 'Conditionals', 'Loops', 'Functions', 'Input & Output', 'Error Handling'];
+    const CANONICAL_LANGUAGES = ['Java', 'Python', 'JavaScript'];
+    const CONCEPT_ALIASES = {
+      conditional: 'Conditionals',
+      conditionals: 'Conditionals',
+      loop: 'Loops',
+      loops: 'Loops',
+      'input/output': 'Input & Output',
+      'input & output': 'Input & Output',
+    };
+
+    // Collapses any spelling/casing variant ("Conditional" vs "Conditionals",
+    // "loop" vs "Loops") down to the single canonical concept name, so a
+    // naming inconsistency in the DB can never be counted as two separate
+    // mastered concepts. This mirrors the normalization already used on the
+    // frontend (profileLogic.js) so admin and profile page always agree.
+    function normalizeConceptName(raw) {
+      const value = String(raw ?? '').trim();
+      const exact = CANONICAL_CONCEPTS.find(c => c.toLowerCase() === value.toLowerCase());
+      if (exact) return exact;
+      return CONCEPT_ALIASES[value.toLowerCase()] || value;
+    }
+
+    function normalizeLanguageName(raw) {
+      const value = String(raw ?? '').trim();
+      const exact = CANONICAL_LANGUAGES.find(l => l.toLowerCase() === value.toLowerCase());
+      return exact || value;
+    }
 
     // For each user, fetch per-language stats + canonical mastery count
     const enrichedUsers = await Promise.all(users.map(async (user) => {
       // ── canonical mastery count for THIS user (user.id is in scope here) ──
-      const { rows: masteryRows } = await db.query(
-        `SELECT COUNT(*) AS mastered
+      // Fetch RAW rows (not a SQL COUNT) so we can normalize concept/language
+      // names in JS before counting. This makes the mastery count immune to
+      // any duplicate-spelling rows already sitting in the DB.
+      const { rows: rawProfileRows } = await db.query(
+        `SELECT language, concept, tasks_completed, total_tasks, success_rate
          FROM user_profiles
-         WHERE user_id = $1
-           AND total_tasks > 0
-           AND tasks_completed >= total_tasks
-           AND success_rate >= 0.60`,
+         WHERE user_id = $1`,
         [user.id]
       );
-      const masteredCount = parseInt(masteryRows[0].mastered, 10) || 0;
+
+      const masteredSet = new Set();
+      rawProfileRows.forEach(row => {
+        const lang = normalizeLanguageName(row.language);
+        const concept = normalizeConceptName(row.concept);
+        const total = Number(row.total_tasks || 0);
+        const completed = Number(row.tasks_completed || 0);
+        const success = Number(row.success_rate || 0);
+        const isMastered = total > 0 && completed >= total && success >= 0.60;
+        if (isMastered) masteredSet.add(`${lang}::${concept}`);
+      });
+      const masteredCount = masteredSet.size;
       const overallPct = Math.round((masteredCount / TOTAL_POSSIBLE_CONCEPTS) * 100);
       const progressCategory =
         overallPct >= 75 ? 'Full Progress' :
