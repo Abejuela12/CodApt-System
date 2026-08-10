@@ -202,10 +202,10 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
                           <div className={styles.progressBar}>
                             <div 
                               className={styles.progressFill} 
-                              style={{ width: `${user.progress || 0}%`, backgroundColor: user.color || '#76D7A4' }}
+                              style={{ width: `${Number(user.overallPct ?? 0)}%`, backgroundColor: user.color || '#76D7A4' }}
                             ></div>
                           </div>
-                          <span className={styles.progressVal}>{user.progress ?? 0}%</span>
+                          <span className={styles.progressVal}>{Number(user.overallPct ?? 0)}%</span>
                         </div>
                       </div>
                     ))

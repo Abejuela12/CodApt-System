@@ -19,7 +19,8 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
   useEffect(() => {
     setUsers(initialUsers.map(user => ({
       ...user,
-      progress: Number(user.progress) || 0,
+      overallPct: Number(user.overallPct ?? 0),
+      masteredCount: Number(user.masteredCount ?? 0),
       color: user.color || getAvatarColor(user.name)
     })));
     if (initialUsers.length > 0) {
@@ -39,7 +40,8 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
         const data = await response.json();
         setUsers(data.map(user => ({
           ...user,
-          progress: Number(user.progress) || 0,
+          overallPct: Number(user.overallPct ?? 0),
+          masteredCount: Number(user.masteredCount ?? 0),
           color: user.color || getAvatarColor(user.name)
         })));
         setError(null);
@@ -154,10 +156,10 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
                       <div className={styles.progressTrack}>
                         <div 
                           className={styles.progressFill} 
-                          style={{ width: `${user.progress}%`, backgroundColor: user.color }}
+                          style={{ width: `${Number(user.overallPct ?? 0)}%`, backgroundColor: user.color }}
                         ></div>
                       </div>
-                      <span className={styles.progressText}>{user.progress}%</span>
+                      <span className={styles.progressText}>{Number(user.overallPct ?? 0)}%</span>
                     </td>
                     <td>
                       <span className={`${styles.statusBadge} ${user.isBanned ? styles.bannedStatus : styles.activeStatus}`}>
@@ -207,10 +209,10 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
               <div className={styles.progressBarLarge}>
                 <div 
                   className={styles.progressFillLarge} 
-                  style={{ width: `${selectedUser.progress}%`, backgroundColor: selectedUser.color }}
+                  style={{ width: `${Number(selectedUser.overallPct ?? 0)}%`, backgroundColor: selectedUser.color }}
                 ></div>
               </div>
-              <p className={styles.progressPercentage}>{selectedUser.progress}% Complete</p>
+              <p className={styles.progressPercentage}>{Number(selectedUser.overallPct ?? 0)}% Complete</p>
             </div>
 
             <div className={styles.detailsSection}>
@@ -260,6 +262,10 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
                 <div className={styles.statItem}>
                   <span>Completed Lessons</span>
                   <span>{selectedUser.completedLessons}</span>
+                </div>
+                <div className={styles.statItem}>
+                  <span>Mastered Concepts</span>
+                  <span>{selectedUser.masteredCount ?? 0}</span>
                 </div>
                 <div className={styles.statItem}>
                   <span>Certificates</span>
