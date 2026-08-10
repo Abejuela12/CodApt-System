@@ -353,7 +353,6 @@ const CodeEditor = ({
       const structuralErrors     = submitData.structuralErrors ?? 0;
       const backendLevel         = submitData.level            || 'Easy';
       const nextTier             = submitData.nextTier         || 'Beginner';
-      setCurrentTier(nextTier);
       const cosineRecommendation = submitData.recommendation   || null;
       const isMastered           = submitData.isMastered       || false;
       const score                = calculateScore(newAttempts, timeSpentSeconds, finalCorrect);
@@ -391,7 +390,10 @@ const CodeEditor = ({
 
       setAttempts(newAttempts);
       setTimeSpent(timeSpentSeconds);
-      if (finalCorrect) onCompleteTask(language, concept, currentTaskIndex + 1);
+      if (finalCorrect) {
+        setCurrentTier(nextTier);
+        onCompleteTask(language, concept, currentTaskIndex + 1);
+      }
 
       // Show mastery celebration whenever the last task is solved correctly,
       // regardless of what the backend isMastered flag says (DB timing can lag).
@@ -497,6 +499,25 @@ const CodeEditor = ({
 
   const displayLevel = mapLevelLabel(assessmentResult.level);
   const levelColors  = getLevelColors(assessmentResult.level);
+
+  const handleRetry = async () => {
+    setShowAssessment(false);
+    setOutput('');
+    setTerminalStatus('idle');
+    setTerminalSessionId(null);
+    terminalSessionIdRef.current = null;
+    terminalBufferRef.current = '';
+    setShowHint(false);
+    setHintLevel(0);
+    setHintUsed(false);
+    if (xtermRef.current) xtermRef.current.clear();
+  };
+
+  const handleContinue = () => {
+    if (!assessmentResult.correct || typeof assessmentResult.nextTaskIndex !== 'number') return;
+    setShowAssessment(false);
+    onNextTask?.(assessmentResult.nextTaskIndex);
+  };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', backgroundColor:'#0d1117', color:'white', fontFamily:'sans-serif' }}>
@@ -728,13 +749,7 @@ const CodeEditor = ({
 
             <div style={{ padding:'16px 20px 20px', textAlign:'center' }}>
               <button
-                onClick={() => {
-                  setShowAssessment(false);
-                  // ONLY advance when correct — closing modal on retry keeps the user on the same task
-                  if (assessmentResult.correct && typeof assessmentResult.nextTaskIndex === 'number') {
-                    onNextTask?.(assessmentResult.nextTaskIndex);
-                  }
-                }}
+                onClick={assessmentResult.correct ? handleContinue : handleRetry}
                 style={{ padding:'10px 28px', background: assessmentResult.correct ? '#22c55e' : '#3b82f6', border:'none', borderRadius:'8px', color:'white', fontWeight:'700', cursor:'pointer' }}
               >
                 {assessmentResult.correct ? 'Next Task →' : '↩ Retry Task'}

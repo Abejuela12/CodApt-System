@@ -12,7 +12,6 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
   const location = useLocation();
   const [users, setUsers] = useState([]);
   const [avgScore, setAvgScore] = useState(0);
-  const [avgProgress, setAvgProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,7 +46,6 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
       if (!response.ok) throw new Error('Failed to load dashboard metrics');
       const data = await response.json();
       setAvgScore(data.avgScore || 0);
-      setAvgProgress(data.avgProgress || 0);
     } catch (err) {
       console.error('Admin metrics fetch error:', err);
     }
@@ -89,6 +87,9 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
 
   const totalLearners = users.length;
   const activeRate = totalLearners ? Math.round((users.filter(user => !user.isBanned).length / totalLearners) * 100) : 0;
+  const averageProgress = totalLearners
+    ? Math.round(users.reduce((sum, user) => sum + Number(user.overallPct ?? 0), 0) / totalLearners)
+    : 0;
 
   const dashboardUsers = users.slice(0, 4);
 
@@ -170,7 +171,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
                     <div className={styles.statContent}>
                         <span className={styles.statEmoji}>✅</span>
                         <p>Average Progress</p>
-                        <h3>{isLoading ? '…' : `${avgProgress}%`}</h3>
+                        <h3>{isLoading ? '…' : `${averageProgress}%`}</h3>
                     </div>
                 </div>
               </div>
