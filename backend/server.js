@@ -434,7 +434,19 @@ app.post('/api/submit', async (req, res) => {
     const finalCorrect = isCorrect && constructUsed;
     const successValue = finalCorrect ? 1 : 0;
 
-    // ── 4. Save submission ───────────────────────────────────────
+    // ── 4. Determine whether this problem was already solved ─────────
+    // Must happen BEFORE inserting the current submission, otherwise the
+    // query will count this new correct submission as a prior solve.
+    const { rows: previousSolveRows } = await db.query(
+      `SELECT COUNT(*) AS solved
+       FROM submissions
+       WHERE user_id = $1 AND problem_id = $2 AND is_correct = true`,
+      [userId, problemId]
+    );
+    const alreadySolved = parseInt(previousSolveRows[0]?.solved, 10) > 0;
+    const newlySolved = finalCorrect && !alreadySolved ? 1 : 0;
+
+    // ── 5. Save submission ───────────────────────────────────────
     // SUPABASE (pg): $1–$11
     await db.query(
       `INSERT INTO submissions
@@ -457,7 +469,7 @@ app.post('/api/submit', async (req, res) => {
       ]
     );
 
-    // ── 5. Upsert user_profiles ──────────────────────────────────
+    // ── 6. Upsert user_profiles ──────────────────────────────────
     // SUPABASE (pg): { rows } and $1–$3
     const { rows: existing } = await db.query(
       `SELECT * FROM user_profiles WHERE user_id = $1 AND language = $2 AND concept = $3`,
@@ -472,16 +484,6 @@ app.post('/api/submit', async (req, res) => {
       [language, concept, problem.problem_tier]
     );
     const totalTasksInDB = parseInt(problemCountRows[0]?.total, 10) || 3;
-
-    // Determine whether this problem was already solved before this submission.
-    const { rows: previousSolveRows } = await db.query(
-      `SELECT COUNT(*) AS solved
-       FROM submissions
-       WHERE user_id = $1 AND problem_id = $2 AND is_correct = true`,
-      [userId, problemId]
-    );
-    const alreadySolved = parseInt(previousSolveRows[0]?.solved, 10) > 0;
-    const newlySolved = finalCorrect && !alreadySolved ? 1 : 0;
 
     // Preserve a learner's existing total_tasks once they have a profile.
     // This prevents the user's progress percentage from dropping if new
@@ -888,7 +890,7 @@ app.get('/api/admin/users', async (req, res) => {
         [user.id]
       );
       const masteredCount = parseInt(masteryRows[0].mastered, 10) || 0;
-      const overallPct = Math.round((masteredCount / TOTAL_POSSIBLE_CONCEPTS) * 100);
+      const overallPct = Number(((masteredCount / TOTAL_POSSIBLE_CONCEPTS) * 100).toFixed(2));
       const progressCategory =
         overallPct >= 75 ? 'Full Progress' :
         overallPct >= 25 ? 'Average'       :
@@ -1282,7 +1284,8 @@ app.get('/api/admin/reports', async (req, res) => {
                     WHERE up.total_tasks > 0
                       AND up.tasks_completed >= up.total_tasks
                       AND up.success_rate >= 0.60
-                  ) * 100.0) / 24
+                  ) * 100.0) / 24,
+                  2
                 ) AS pct
          FROM users u
          LEFT JOIN user_profiles up ON up.user_id = u.id
