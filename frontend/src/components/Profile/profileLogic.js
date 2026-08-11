@@ -165,7 +165,9 @@ function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concept
   });
 
   const avgSuccess = langCount > 0 ? Math.round(successSum / langCount) : 0;
-  const rank = avgSuccess > 80 ? 'Gold' : avgSuccess > 50 ? 'Silver' : 'Bronze';
+  const totalConcepts = languages.length * concepts.length;
+  const masteryPercentage = totalConcepts > 0 ? (totalMastered / totalConcepts) * 100 : 0;
+  const rank = masteryPercentage >= 80 ? 'Gold' : masteryPercentage >= 50 ? 'Silver' : 'Bronze';
 
   let rec = '';
   let actions = [];
@@ -187,7 +189,7 @@ function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concept
   const cons = avgSuccess > 80 ? 'rock-solid consistency' : avgSuccess > 60 ? 'good consistency' : 'some ups and downs';
   const interp = `Your graph shows a ${trend} pattern with ${cons}. You're ${avgSuccess > 70 ? 'mastering concepts quickly' : avgSuccess > 40 ? 'building momentum' : 'gaining valuable experience'}!`;
 
-  return { totalMastered, avgSuccess, rank, langStats, rec, actions, interp };
+  return { totalMastered, masteryPercentage, avgSuccess, rank, langStats, rec, actions, interp };
 }
 
 export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress };

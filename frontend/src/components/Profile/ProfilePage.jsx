@@ -77,12 +77,6 @@ const ProfilePage = ({
     loadProfileData();
   }, [loadProfileData]);
 
-  useEffect(() => {
-    const langs = Object.keys(propProgress || {});
-    if (langs.length > 0 && !langs.includes(selectedLang)) {
-      setSelectedLang(langs[0]);
-    }
-  }, [propProgress, selectedLang]);
   useEffect(() => { if (!showToast) return; const t = setTimeout(() => setShowToast(false), 3000); return () => clearTimeout(t); }, [showToast]);
   useEffect(() => { if (!showAnalysis) return; setIsAnalyzing(true); const t = setTimeout(() => setIsAnalyzing(false), 1800); return () => clearTimeout(t); }, [showAnalysis]);
 

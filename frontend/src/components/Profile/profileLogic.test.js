@@ -23,7 +23,7 @@ function run() {
 
   const overall = buildOverallStats(progress);
   assert.equal(overall.totalMastered, 2, 'Overall mastered count should reflect only fully completed mastered concepts');
-  assert.equal(overall.rank, 'Silver', 'Performance should map to a Silver rank for this sample');
+  assert.equal(overall.rank, 'Bronze', 'Mastery percentage should map to a Bronze rank for this sample');
 
   const capability = getLanguageCapability('Python', progress);
   assert.equal(capability.label, 'Intermediate', 'Python should be Intermediate for this sample');
