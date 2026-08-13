@@ -428,9 +428,10 @@ app.post('/api/submit', async (req, res) => {
     const structuralErrors = cfgResult.structuralErrors;
     const cfgFeedback = cfgResult.feedback;
     const constructUsed = cfgResult.constructUsed;
+    const hardcoded = cfgResult.hardcoded;
 
     // ── 3. Final correctness ─────────────────────────────────────
-    const finalCorrect = isCorrect && constructUsed;
+    const finalCorrect = isCorrect && constructUsed && !hardcoded;
     const successValue = finalCorrect ? 1 : 0;
 
     // ── 4. Determine whether this problem was ALREADY solved, BEFORE we

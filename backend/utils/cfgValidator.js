@@ -1,5 +1,3 @@
-
-
 // ─── helpers ────────────────────────────────────────────────────
 
 function stripComments(code, language) {
@@ -74,6 +72,17 @@ function isConstructUsed(code, language, construct) {
 
     case 'def':
       return /\bdef\s+\w+\s*\(/.test(cleaned);
+
+    // BUG FIX (ETC-related): 'assignment' was previously unhandled and fell
+    // through to the literal-word default case below, which searched the
+    // student's code for the text "assignment" — something real code never
+    // contains. That made every FALLBACK_PROBLEMS task requiring
+    // 'assignment' (Python Variables / Data Types / Operators) permanently
+    // unsolvable even with perfectly correct code. This detects a real
+    // assignment operator (=) while excluding ==, !=, <=, >= so comparisons
+    // aren't mistaken for assignments.
+    case 'assignment':
+      return /(?<![=!<>])=(?!=)/.test(cleaned);
 
     case 'function':
       if (lang === 'python') {
@@ -354,13 +363,18 @@ function validateCFG(code, language, requiredConstruct, expectedOutput) {
   }
 
   // 2. Hardcoding check
-  const hardcoded = isHardcoded(code, language, expectedOutput, constructUsed);
+  // BUG FIX (ETC-01): this boolean was previously computed and used only to
+  // increment structuralErrors/feedback locally — it was never returned from
+  // this function, so server.js's finalCorrect calculation had no way to see
+  // it and hardcoded submissions were silently accepted as correct. It is
+  // now included in the returned object below.
+  const hardcoded = isHardcoded(code, language, expectedOutput);
 
   if (hardcoded) {
     structuralErrors++;
     feedback.push(
       '⚠ It looks like you printed the answer directly without computing it. ' +
-      'Try using variables and operations to derive the result.'
+      'This submission will not be marked correct — use variables and operations to derive the result.'
     );
   }
 
@@ -375,7 +389,7 @@ function validateCFG(code, language, requiredConstruct, expectedOutput) {
     feedback.push('✔ Code structure looks good.');
   }
 
-  return { syntaxErrors, structuralErrors, feedback, constructUsed };
+  return { syntaxErrors, structuralErrors, feedback, constructUsed, hardcoded };
 }
 
 module.exports = { validateCFG };
