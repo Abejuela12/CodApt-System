@@ -1,68 +1,8 @@
 const assert = require('assert');
+const { isOutputMatch } = require('./utils/outputMatching');
+const { validateCFG } = require('./utils/cfgValidator');
 
-function normalizeOutput(str) {
-  return (str || '')
-    .split('\n')
-    .map(line => line.trimEnd())
-    .join('\n')
-    .trim();
-}
-
-function normalizeTerminalOutput(raw) {
-  return (raw || '')
-    .replace(/\r/g, '')
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line && !/^>\s*$/.test(line))
-    .join('\n')
-    .trim();
-}
-
-function extractEffectiveOutput(actual, expected) {
-  const cleanActual = normalizeTerminalOutput(actual);
-  if (cleanActual === expected) return cleanActual;
-
-  const lines = cleanActual.split('\n').map(line => line.trim()).filter(Boolean);
-  if (lines.includes(expected)) return expected;
-
-  if (expected && cleanActual.includes(expected)) {
-    const idx = cleanActual.lastIndexOf(expected);
-    const suffix = cleanActual.slice(idx).trim();
-    if (suffix === expected) return expected;
-  }
-
-  return cleanActual;
-}
-
-function isOutputMatch(actual, expected) {
-  const cleanActual = normalizeTerminalOutput(actual);
-  const cleanExpected = normalizeOutput(expected);
-
-  if (!cleanExpected) return true;
-  if (cleanActual === cleanExpected) return true;
-  if (cleanActual.includes(cleanExpected)) return true;
-
-  const lowerActual = cleanActual.toLowerCase();
-  const lowerExpected = cleanExpected.toLowerCase();
-
-  if (lowerExpected.includes('table') && lowerActual.includes('data loaded successfully') && lowerActual.includes('invalid input detected')) {
-    return true;
-  }
-
-  if (lowerExpected.includes('table')) {
-    const expectedKeywords = lowerExpected
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter(word => !['output', 'includes', 'a', 'an', 'the', 'then', 'with', 'and', 'to', 'for', 'of'].includes(word));
-
-    const matchedKeywords = expectedKeywords.filter(keyword => lowerActual.includes(keyword));
-    return matchedKeywords.length >= 2;
-  }
-
-  return false;
-}
-
+// Table-style legacy check
 const sampleActual = `┌─────────┬────────┐
 │ (index) │ Values │
 ├─────────┼────────┤
@@ -71,8 +11,53 @@ const sampleActual = `┌─────────┬────────�
 └─────────┴────────┘
 Data loaded successfully
 Invalid input detected`;
-
 const sampleExpected = 'Output includes a table with name and grade, then:\nData loaded successfully\nInvalid input detected';
-
 assert.strictEqual(isOutputMatch(sampleActual, sampleExpected), true, 'table-based output should match by content');
 console.log('PASS: table-style output matching');
+
+// ── BUG #1 REGRESSION TEST CASES ──
+
+// CASE 1 — EXTRA PLACEHOLDER OUTPUT
+const case1Expected = "<class 'int'>\n<class 'float'>";
+const case1Actual = "Replace this line!\n<class 'int'>\n<class 'float'>";
+assert.strictEqual(isOutputMatch(case1Actual, case1Expected), false, 'CASE 1: Extra placeholder output must be REJECTED');
+console.log('PASS: CASE 1 — EXTRA PLACEHOLDER OUTPUT');
+
+// CASE 2 — EXACT EXPECTED OUTPUT
+const case2Expected = "<class 'int'>\n<class 'float'>";
+const case2Actual = "<class 'int'>\n<class 'float'>";
+assert.strictEqual(isOutputMatch(case2Actual, case2Expected), true, 'CASE 2: Exact expected output must be ACCEPTED');
+console.log('PASS: CASE 2 — EXACT EXPECTED OUTPUT');
+
+// CASE 3 — WRONG OUTPUT
+const case3Expected = "15";
+const case3Actual = "10";
+assert.strictEqual(isOutputMatch(case3Actual, case3Expected), false, 'CASE 3: Wrong output must be REJECTED');
+console.log('PASS: CASE 3 — WRONG OUTPUT');
+
+// CASE 4 — CORRECT COMPUTED OUTPUT
+const case4Expected = "15";
+const case4Actual = "15";
+assert.strictEqual(isOutputMatch(case4Actual, case4Expected), true, 'CASE 4: Correct computed output must be ACCEPTED');
+console.log('PASS: CASE 4 — CORRECT COMPUTED OUTPUT');
+
+// CASE 5 — REQUIRED CONSTRUCT MISSING
+const case5CodeMissingIf = "print('large')";
+const case5Cfg = validateCFG(case5CodeMissingIf, 'python', 'if', 'large');
+assert.strictEqual(case5Cfg.constructUsed, false, 'CASE 5: Code missing required construct if must fail CFG validation');
+console.log('PASS: CASE 5 — REQUIRED CONSTRUCT MISSING');
+
+// CASE 6 — EXISTING VALID VARIABLE SOLUTION
+const case6Code = "x = 10\ny = 5\nprint(x + y)";
+const case6ExpectedOutput = "15";
+const case6ActualOutput = "15";
+const case6Cfg = validateCFG(case6Code, 'python', 'assignment', case6ExpectedOutput);
+assert.strictEqual(isOutputMatch(case6ActualOutput, case6ExpectedOutput), true, 'CASE 6: Output match for valid variable solution');
+assert.strictEqual(case6Cfg.constructUsed, true, 'CASE 6: Valid variable solution must satisfy CFG construct');
+console.log('PASS: CASE 6 — EXISTING VALID VARIABLE SOLUTION');
+
+// CASE 7 — EXTRA OUTPUT AFTER CORRECT OUTPUT
+const case7Expected = "15";
+const case7Actual = "15\nhello";
+assert.strictEqual(isOutputMatch(case7Actual, case7Expected), false, 'CASE 7: Extra output after correct output must be REJECTED');
+console.log('PASS: CASE 7 — EXTRA OUTPUT AFTER CORRECT OUTPUT');

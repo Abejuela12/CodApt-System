@@ -5,7 +5,7 @@ import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 import 'swiper/css/effect-coverflow';
-import { isConceptMastered } from '../Profile/profileLogic';
+import { isConceptMastered, getConceptProgress } from '../Profile/profileLogic';
 import styles from './ConceptModal.module.css';
 
 
@@ -78,7 +78,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <button className={styles.closeBtn} onClick={onClose}>✕</button>
         <h2 className={styles.modalTitle}>
-          Choose a Concept - {language?.toUpperCase()} 
+          Choose a Concept - {language?.toUpperCase()}
         </h2>
 
         {/* ── "Just Mastered" congratulatory banner ── */}
@@ -136,8 +136,8 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
             </div>
             {/* Mastered banner inside card detail */}
             {(() => {
-              const d = progress?.[language]?.[selectedConcept];
-              const mastered = d && d.tasksCompleted >= d.totalTasks && d.successRate >= 60;
+              const d = getConceptProgress(progress?.[language] || {}, selectedConcept);
+              const mastered = isConceptMastered(progress, language, selectedConcept);
               return mastered ? (
                 <div style={{
                   backgroundColor: 'rgba(250,204,21,0.12)', border: '1px solid #facc15',
@@ -355,7 +355,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
 
             {/* Progress from data */}
             {(() => {
-              const d = progress?.[language]?.[popupConcept];
+              const d = getConceptProgress(progress?.[language] || {}, popupConcept);
               if (!d) return null;
               return (
                 <div style={{

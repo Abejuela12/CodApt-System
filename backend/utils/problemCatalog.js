@@ -38,9 +38,9 @@ const FALLBACK_PROBLEMS = [
   {
     id: 100004,
     language: 'Python',
-    concept: 'Conditional',
-    difficulty: 'Easy',
-    problem_tier: 'Beginner',
+    concept: 'Conditionals',
+    difficulty: 'Intermediate',
+    problem_tier: 'Intermediate',
     title: 'Check a Condition',
     instruction: 'Use an if statement to print a message when a number is greater than 10.',
     expected_output: 'large',
@@ -145,11 +145,18 @@ const FALLBACK_PROBLEMS = [
   }
 ];
 
+function normalizeConceptString(str) {
+  const s = String(str || '').trim().toLowerCase();
+  if (s === 'conditional') return 'conditionals';
+  return s.replace(/[^a-z0-9]/gi, '');
+}
+
 function getFallbackProblems({ language, concept, difficulty, problemTier }) {
+  const normConcept = normalizeConceptString(concept);
   return FALLBACK_PROBLEMS.filter(problem =>
     problem.language === language &&
-    problem.concept === concept &&
-    problem.difficulty === difficulty &&
+    normalizeConceptString(problem.concept) === normConcept &&
+    (!difficulty || problem.difficulty === difficulty) &&
     (!problemTier || problem.problem_tier === problemTier)
   );
 }
@@ -158,4 +165,14 @@ function resolveProblemMetadata(problemId) {
   return FALLBACK_PROBLEMS.find(problem => problem.id === problemId) || null;
 }
 
-module.exports = { FALLBACK_PROBLEMS, getFallbackProblems, resolveProblemMetadata };
+function getConceptTotalTaskCount(language, concept, problemTier) {
+  const matches = getFallbackProblems({ language, concept, problemTier });
+  return matches.length > 0 ? matches.length : 3;
+}
+
+module.exports = {
+  FALLBACK_PROBLEMS,
+  getFallbackProblems,
+  resolveProblemMetadata,
+  getConceptTotalTaskCount
+};

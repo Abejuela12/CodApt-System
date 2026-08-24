@@ -1,4 +1,4 @@
-const DEFAULT_CONCEPTS = ['Variables','Data Types','Operators','Conditionals','Loops','Functions','Input & Output','Error Handling'];
+const DEFAULT_CONCEPTS = ['Variables', 'Data Types', 'Operators', 'Conditionals', 'Loops', 'Functions', 'Input & Output', 'Error Handling'];
 const DEFAULT_LANGUAGES = ['Java', 'Python', 'JavaScript'];
 const DEFAULT_MASTERY_THRESHOLD = 60;
 
@@ -9,6 +9,10 @@ function normalizeConceptName(conceptName, concepts = DEFAULT_CONCEPTS) {
   const exactMatch = concepts.find(c => c.toLowerCase() === value.toLowerCase());
   if (exactMatch) return exactMatch;
 
+  const stripped = value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const strippedMatch = concepts.find(c => c.replace(/[^a-z0-9]/gi, '').toLowerCase() === stripped);
+  if (strippedMatch) return strippedMatch;
+
   const aliases = {
     conditionals: 'Conditionals',
     conditional: 'Conditionals',
@@ -16,9 +20,12 @@ function normalizeConceptName(conceptName, concepts = DEFAULT_CONCEPTS) {
     loop: 'Loops',
     'input/output': 'Input & Output',
     'input & output': 'Input & Output',
+    'inputandoutput': 'Input & Output',
+    'datatypes': 'Data Types',
+    'datatype': 'Data Types',
   };
 
-  return aliases[value.toLowerCase()] || value;
+  return aliases[value.toLowerCase()] || aliases[stripped] || value;
 }
 
 function normalizeLanguageName(language, progress = {}) {
@@ -35,15 +42,26 @@ function getLanguageProgress(progress = {}, language) {
 }
 
 function getConceptProgress(langData = {}, conceptName, concepts = DEFAULT_CONCEPTS) {
-  const normalizedName = normalizeConceptName(conceptName, concepts);
-  const direct = langData[conceptName];
-  if (direct) return direct;
+  if (!langData || typeof langData !== 'object') return null;
 
-  const alias = langData[normalizedName];
-  if (alias) return alias;
+  const targetNorm = normalizeConceptName(conceptName, concepts);
 
-  const found = Object.entries(langData).find(([key]) => normalizeConceptName(key, concepts).toLowerCase() === normalizedName.toLowerCase());
-  return found?.[1] || null;
+  const matches = Object.entries(langData)
+    .filter(([key]) => normalizeConceptName(key, concepts).toLowerCase() === targetNorm.toLowerCase())
+    .map(([, val]) => val);
+
+  if (matches.length === 0) return null;
+
+  return matches.find(m => m && (m.mastered === true || m.isMastered === true)) ||
+    matches.reduce((best, cur) => {
+      if (!best) return cur;
+      if (!cur) return best;
+      const bestTasks = best.tasksCompleted ?? 0;
+      const curTasks = cur.tasksCompleted ?? 0;
+      if (curTasks > bestTasks) return cur;
+      if (curTasks === bestTasks && (cur.successRate ?? 0) > (best.successRate ?? 0)) return cur;
+      return best;
+    }, null);
 }
 
 function isConceptMastered(progress = {}, language, conceptName, threshold = DEFAULT_MASTERY_THRESHOLD, concepts = DEFAULT_CONCEPTS) {
@@ -192,4 +210,11 @@ function buildOverallStats(progress = {}, languages = DEFAULT_LANGUAGES, concept
   return { totalMastered, masteryPercentage, avgSuccess, rank, langStats, rec, actions, interp };
 }
 
-export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress };
+function getConceptTotalTaskCount(language, conceptName, problemTier) {
+  const norm = normalizeConceptName(conceptName);
+  const singleTaskConcepts = ['Variables', 'Data Types', 'Operators', 'Conditionals', 'Input & Output', 'Error Handling'];
+  if (singleTaskConcepts.includes(norm)) return 1;
+  return 3;
+}
+
+export { DEFAULT_CONCEPTS, DEFAULT_LANGUAGES, getLanguageCapability, calcMasteryProgress, buildOverallStats, buildPerformanceChartData, isConceptMastered, getConceptProgress, getConceptTotalTaskCount };

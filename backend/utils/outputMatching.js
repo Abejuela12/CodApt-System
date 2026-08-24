@@ -1,4 +1,4 @@
-export function normalizeOutput(str) {
+function normalizeOutput(str) {
   return (str || '')
     .split('\n')
     .map(line => line.trimEnd())
@@ -6,7 +6,7 @@ export function normalizeOutput(str) {
     .trim();
 }
 
-export function normalizeTerminalOutput(raw) {
+function normalizeTerminalOutput(raw) {
   return (raw || '')
     .replace(/\r/g, '')
     .split('\n')
@@ -16,14 +16,14 @@ export function normalizeTerminalOutput(raw) {
     .trim();
 }
 
-export function extractEffectiveOutput(actual, expected) {
+function extractEffectiveOutput(actual, expected) {
   const cleanActual = normalizeTerminalOutput(actual);
   const cleanExpected = normalizeOutput(expected);
   if (cleanActual === cleanExpected) return cleanActual;
   return cleanActual;
 }
 
-export function isOutputMatch(actual, expected) {
+function isOutputMatch(actual, expected) {
   const cleanActual = normalizeTerminalOutput(actual);
   const cleanExpected = normalizeOutput(expected);
 
@@ -51,3 +51,10 @@ export function isOutputMatch(actual, expected) {
 
   return false;
 }
+
+module.exports = {
+  normalizeOutput,
+  normalizeTerminalOutput,
+  extractEffectiveOutput,
+  isOutputMatch
+};

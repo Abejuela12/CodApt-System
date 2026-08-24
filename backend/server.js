@@ -9,6 +9,7 @@ const path = require('path');
 const os = require('os');
 const db = require('./db');
 const { validateCFG } = require('./utils/cfgValidator');
+const { isOutputMatch } = require('./utils/outputMatching');
 const { recommendExercise } = require('./utils/cosineSimilarity');
 const { CARTClassifier } = require('./utils/cartModel');
 const { getFallbackProblems, resolveProblemMetadata } = require('./utils/problemCatalog');
@@ -404,7 +405,7 @@ app.post('/api/submit', async (req, res) => {
   try {
     const {
       userId, problemId, language, concept,
-      code, attempts, timeSpent, isCorrect, hintUsed = false
+      code, attempts, timeSpent, isCorrect, output, hintUsed = false
     } = req.body;
 
     // ── 1. Fetch problem meta ────────────────────────────────────
@@ -431,7 +432,8 @@ app.post('/api/submit', async (req, res) => {
     const hardcoded = cfgResult.hardcoded;
 
     // ── 3. Final correctness ─────────────────────────────────────
-    const finalCorrect = isCorrect && constructUsed && !hardcoded;
+    const outputMatches = output !== undefined ? isOutputMatch(output, expectedOutput) : Boolean(isCorrect);
+    const finalCorrect = outputMatches && constructUsed && !hardcoded;
     const successValue = finalCorrect ? 1 : 0;
 
     // ── 4. Determine whether this problem was ALREADY solved, BEFORE we
@@ -496,14 +498,11 @@ app.post('/api/submit', async (req, res) => {
       `SELECT COUNT(*) AS total FROM problems WHERE language = $1 AND concept = $2 AND problem_tier = $3`,
       [language, concept, problem.problem_tier]
     );
-    const totalTasksInDB = parseInt(problemCountRows[0]?.total, 10) || 3;
-
-    // Preserve a learner's existing total_tasks once they have a profile.
-    // This prevents the user's progress percentage from dropping if new
-    // problems are added to the DB after they started the concept.
-    const effectiveTotalTasks = existing.length > 0
-      ? (existing[0].total_tasks || totalTasksInDB)
-      : totalTasksInDB;
+    const { getConceptTotalTaskCount } = require('./utils/problemCatalog');
+    const dbCount = parseInt(problemCountRows[0]?.total, 10);
+    const catalogCount = getConceptTotalTaskCount(language, concept, problem.problem_tier);
+    const totalTasksInDB = dbCount > 0 ? dbCount : catalogCount;
+    const effectiveTotalTasks = totalTasksInDB;
 
     if (existing.length === 0) {
       // SUPABASE (pg): $1–$10
@@ -809,11 +808,13 @@ app.get('/api/progress/:userId', async (req, res) => {
       [userId]
     );
 
+    const { getConceptTotalTaskCount } = require('./utils/problemCatalog');
     const progress = {};
     rows.forEach(row => {
       if (!progress[row.language]) progress[row.language] = {};
       const tasksCompleted = row.tasks_completed;
-      const totalTasks = row.total_tasks;
+      const catalogCount = getConceptTotalTaskCount(row.language, row.concept, row.performance_level || 'Beginner');
+      const totalTasks = catalogCount;
       const successRate = Math.round(row.success_rate * 100);
       progress[row.language][row.concept] = {
         tasksCompleted,
@@ -942,16 +943,16 @@ app.get('/api/admin/users', async (req, res) => {
         const concept = normalizeConceptName(row.concept);
         const total = Number(row.total_tasks || 0);
         const completed = Number(row.tasks_completed || 0);
-        const success = Number(row.success_rate || 0);
-        const isMastered = total > 0 && completed >= total && success >= 0.60;
+        const completionRate = total > 0 ? completed / total : 0;
+        const isMastered = total > 0 && completed >= total && completionRate >= 0.60;
         if (isMastered) masteredSet.add(`${lang}::${concept}`);
       });
       const masteredCount = masteredSet.size;
       const overallPct = Math.round((masteredCount / TOTAL_POSSIBLE_CONCEPTS) * 100);
       const progressCategory =
         overallPct >= 75 ? 'Full Progress' :
-        overallPct >= 25 ? 'Average'       :
-                            'Below Average';
+          overallPct >= 25 ? 'Average' :
+            'Below Average';
 
       const { rows: langStats } = await db.query(
         `SELECT
@@ -1425,7 +1426,7 @@ app.get('/api/admin/reports/download', async (req, res) => {
     let submissions = [];
     try {
       const { rows } = await db.query(
-        `SELECT 
+        `SELECT
            s.id,
            u.name AS student_name,
            u.email AS student_email,
@@ -1456,7 +1457,7 @@ app.get('/api/admin/reports/download', async (req, res) => {
     let profiles = [];
     try {
       const { rows } = await db.query(
-        `SELECT 
+        `SELECT
            up.user_id,
            u.name AS student_name,
            u.email AS student_email,
@@ -1485,7 +1486,7 @@ app.get('/api/admin/reports/download', async (req, res) => {
     let recommendations = [];
     try {
       const { rows } = await db.query(
-        `SELECT 
+        `SELECT
            r.user_id,
            u.name AS student_name,
            sp.title AS source_problem,

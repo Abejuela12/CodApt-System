@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import LanguageCards from './components/Cards/LanguageCards'; 
+import LanguageCards from './components/Cards/LanguageCards';
 import ConceptModal from './components/Cards/ConceptModal';
 import CodeEditor from './components/CodeEditors/CodeEditor';
 import ProfilePage from './components/Profile/ProfilePage';
@@ -10,14 +10,15 @@ import Login from './components/LogIn/Login';
 import ChooseLevelModal from './components/Cards/ChooseLevelModal';
 import AdminDashboard from './components/Admin-Dashboard/AdminDashboard';
 import { API_BASE_URL } from './config';
+import { isConceptMastered, getConceptTotalTaskCount } from './components/Profile/profileLogic';
 import './App.css';
 
 const EMPTY_USER = {
-  id:       null,
-  name:     '',
+  id: null,
+  name: '',
   username: '',
-  email:    '',
-  photo:    null
+  email: '',
+  photo: null
 };
 
 const getProgressStorageKey = (userId) => `codapt_progress_${userId || 'guest'}`;
@@ -72,18 +73,18 @@ const saveStoredTaskIndices = (userId, taskIndices) => {
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isDarkMode, setIsDarkMode]   = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Determine current page from URL
   const currentPage = location.pathname === '/' ? 'landing'
     : location.pathname === '/signup' ? 'signup'
-    : location.pathname === '/login' ? 'login'
-    : location.pathname.startsWith('/admin') ? 'admin'
-    : location.pathname === '/profile' ? 'profile'
-    : 'languages';
+      : location.pathname === '/login' ? 'login'
+        : location.pathname.startsWith('/admin') ? 'admin'
+          : location.pathname === '/profile' ? 'profile'
+            : 'languages';
 
-  const [selectedLang, setSelectedLang]       = useState(null);
-  const [selectedLevel, setSelectedLevel]     = useState(null);
+  const [selectedLang, setSelectedLang] = useState(null);
+  const [selectedLevel, setSelectedLevel] = useState(null);
   const [selectedConcept, setSelectedConcept] = useState(null);
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -137,17 +138,21 @@ function App() {
 
   const handleCompleteTask = (language, concept, taskId) => {
     setProgress(prev => {
+      const catalogCount = getConceptTotalTaskCount(language, concept, selectedLevel || 'Beginner');
       const existing = prev?.[language]?.[concept] || {};
-      const totalTasks = existing.totalTasks || 3;
+      const totalTasks = catalogCount;
+      const tasksCompleted = Math.max(existing.tasksCompleted || 0, taskId);
+      const successRate = Math.round((tasksCompleted / totalTasks) * 100);
       const next = {
         ...prev,
         [language]: {
           ...prev[language],
           [concept]: {
             ...existing,
-            tasksCompleted: Math.max(existing.tasksCompleted || 0, taskId),
+            tasksCompleted,
             totalTasks,
-            successRate: Math.max(existing.successRate || 0, Math.round((taskId / totalTasks) * 100)),
+            successRate: Math.max(existing.successRate || 0, successRate),
+            mastered: tasksCompleted >= totalTasks && successRate >= 60,
           }
         }
       };
@@ -159,7 +164,7 @@ function App() {
   const handleSaveProfile = async (formData) => {
     if (!userData.id) { setUserData(formData); return; }
     try {
-      const res  = await fetch(`${API_BASE_URL}/api/auth/profile/${userData.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/auth/profile/${userData.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
@@ -176,12 +181,12 @@ function App() {
     if (userData?.id) {
       const finalTaskIndices = selectedLang && selectedConcept != null
         ? {
-            ...savedTaskIndices,
-            [selectedLang]: {
-              ...savedTaskIndices[selectedLang],
-              [selectedConcept]: currentTaskIndex
-            }
+          ...savedTaskIndices,
+          [selectedLang]: {
+            ...savedTaskIndices[selectedLang],
+            [selectedConcept]: currentTaskIndex
           }
+        }
         : savedTaskIndices;
 
       saveStoredProgress(userData.id, progress);
@@ -229,13 +234,40 @@ function App() {
     handleLogout();
   };
 
-  const goToAdmin         = () => navigate('/admin');
-  const goToLanding       = () => navigate('/');
-  const goToSignUp        = () => navigate('/signup');
-  const goToLogin         = () => navigate('/login');
-  const goToLanguages     = () => navigate('/languages');
-  const goToProfile       = () => navigate('/profile');
+  const goToAdmin = () => navigate('/admin');
+  const goToLanding = () => navigate('/');
+  const goToSignUp = () => navigate('/signup');
+  const goToLogin = () => navigate('/login');
+  const goToLanguages = () => navigate('/languages');
+  const goToProfile = () => navigate('/profile');
   const goToAdminSettings = () => navigate('/admin/settings');
+
+  const mergeProgressWithMastery = (prevProgress = {}, serverProgress = {}) => {
+    if (!serverProgress || typeof serverProgress !== 'object') return prevProgress;
+    const merged = { ...serverProgress };
+    Object.keys(prevProgress || {}).forEach(lang => {
+      if (!merged[lang]) merged[lang] = { ...prevProgress[lang] };
+      else {
+        merged[lang] = { ...merged[lang] };
+        Object.keys(prevProgress[lang] || {}).forEach(concept => {
+          const prevEntry = prevProgress[lang][concept];
+          const serverEntry = merged[lang][concept];
+          const isMasteredLocally = prevEntry?.mastered === true || isConceptMastered(prevProgress, lang, concept);
+          if (isMasteredLocally) {
+            merged[lang][concept] = {
+              ...serverEntry,
+              ...prevEntry,
+              mastered: true,
+              tasksCompleted: Math.max(prevEntry?.tasksCompleted || 0, serverEntry?.tasksCompleted || 0),
+              totalTasks: prevEntry?.totalTasks || serverEntry?.totalTasks || 1,
+              successRate: Math.max(prevEntry?.successRate || 0, serverEntry?.successRate || 0),
+            };
+          }
+        });
+      }
+    });
+    return merged;
+  };
 
   // Fetch progress from server and store it — called after login/signup
   const fetchAndSetProgress = async (userId) => {
@@ -255,11 +287,14 @@ function App() {
 
     setProgressLoading(true);
     try {
-      const res  = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
+      const res = await fetch(`${API_BASE_URL}/api/progress/${userId}`);
       const data = await res.json();
       if (data && typeof data === 'object') {
-        setProgress(data);
-        saveStoredProgress(userId, data);
+        setProgress(prev => {
+          const merged = mergeProgressWithMastery(prev, data);
+          saveStoredProgress(userId, merged);
+          return merged;
+        });
       }
       // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
@@ -384,30 +419,36 @@ function App() {
             if (nextIndex === 'Complete!') {
               const conceptName = masteredConcept || selectedConcept;
 
-              // Show the celebration UI immediately — this is purely cosmetic
-              // and does NOT get persisted as the source of truth. The real
-              // mastery state always comes from the server fetch below.
-              setJustMasteredConcept(conceptName);
-
-              // Refresh progress from the server and REPLACE state outright.
-              // Previously this used mergeProgress(prev, data), which
-              // re-applied any stale `mastered: true` flag already sitting
-              // in local state ON TOP of the fresh server data — meaning a
-              // concept could look permanently "mastered" in the UI forever
-              // after a single optimistic guess, even if the database later
-              // showed it was never actually completed (e.g. 1/3 tasks).
-              // Always trusting the freshly-fetched server response, with no
-              // merge step, is what keeps the client honest with the DB.
               if (userData?.id) {
                 fetch(`${API_BASE_URL}/api/progress/${userData.id}`)
                   .then(r => r.json())
                   .then(data => {
                     if (data && typeof data === 'object') {
-                      setProgress(data);
-                      saveStoredProgress(userData.id, data);
+                      setProgress(prev => {
+                        const merged = mergeProgressWithMastery(prev, data);
+                        saveStoredProgress(userData.id, merged);
+                        if (isConceptMastered(merged, selectedLang, conceptName)) {
+                          setJustMasteredConcept(conceptName);
+                        } else {
+                          setJustMasteredConcept(null);
+                        }
+                        return merged;
+                      });
                     }
                   })
-                  .catch(() => {});
+                  .catch(() => {
+                    if (isConceptMastered(progress, selectedLang, conceptName)) {
+                      setJustMasteredConcept(conceptName);
+                    } else {
+                      setJustMasteredConcept(null);
+                    }
+                  });
+              } else {
+                if (isConceptMastered(progress, selectedLang, conceptName)) {
+                  setJustMasteredConcept(conceptName);
+                } else {
+                  setJustMasteredConcept(null);
+                }
               }
 
               setSavedTaskIndices(prev => ({

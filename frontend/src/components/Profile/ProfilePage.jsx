@@ -130,7 +130,8 @@ const ProfilePage = ({
     const success        = stored?.successRate ?? 0;
     const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
     const isMastered     = hasData && isConceptMastered(propProgress, selectedLang, concept);
-    const masteryPct     = hasData ? Math.round(success) : 0;
+    const displaySuccessRate = Math.min(100, Math.max(0, Math.round(Number(success) || 0)));
+    const masteryPct     = hasData ? displaySuccessRate : 0;
     const lvl = !hasData
       ? { label: 'Not Started', color: '#64748b' }
       : isMastered
@@ -263,7 +264,7 @@ const ProfilePage = ({
                       }} />
                     </div>
                     <p className={styles.conceptRate}>
-                      {hasData ? `${Math.round(success)}% success rate` : 'Not attempted yet'}
+                      {hasData ? `${masteryPct}% success rate` : 'Not attempted yet'}
                     </p>
                   </div>
                 ))

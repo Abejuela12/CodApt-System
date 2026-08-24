@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { calcMasteryProgress, buildOverallStats, getLanguageCapability, buildPerformanceChartData, isConceptMastered } from './profileLogic.js';
+import { calcMasteryProgress, buildOverallStats, getLanguageCapability, buildPerformanceChartData, isConceptMastered, getConceptProgress } from './profileLogic.js';
+import { getFallbackProblems } from '../../../../backend/utils/problemCatalog.js';
 
 function run() {
   const progress = {
@@ -73,6 +74,31 @@ function run() {
     }
   };
   assert.ok(isConceptMastered(ioProgress, 'JavaScript', 'Input & Output'), 'Input & Output should be mastered when completed at the threshold');
+
+  // ── BUG #2 MASTERY RECOGNITION REGRESSION TESTS (CASES A-F) ──
+
+  // CASE A — Variables: 1/1 task completed at 100% -> mastered = true
+  const caseA = { Python: { Variables: { tasksCompleted: 1, totalTasks: 1, successRate: 100 } } };
+  assert.ok(isConceptMastered(caseA, 'Python', 'Variables'), 'CASE A: Variables 1/1 task completed must be mastered');
+
+  // CASE B — Data Types 1-task concept: 1/1 task completed at 100% -> mastered = true
+  const caseB = { Python: { 'Data Types': { tasksCompleted: 1, totalTasks: 1, successRate: 100 } } };
+  assert.ok(isConceptMastered(caseB, 'Python', 'Data Types'), 'CASE B: Data Types 1/1 task completed must be mastered');
+
+  // CASE C — Incomplete multi-task concept: 1/3 tasks completed at 33% -> mastered = false
+  const caseC = { Python: { Loops: { tasksCompleted: 1, totalTasks: 3, successRate: 33 } } };
+  assert.equal(isConceptMastered(caseC, 'Python', 'Loops'), false, 'CASE C: Incomplete multi-task concept (1/3) MUST NOT be mastered');
+
+  // CASE D — Fully completed multi-task concept: 3/3 tasks completed at 100% -> mastered = true
+  const caseD = { Python: { Loops: { tasksCompleted: 3, totalTasks: 3, successRate: 100 } } };
+  assert.ok(isConceptMastered(caseD, 'Python', 'Loops'), 'CASE D: Fully completed multi-task concept (3/3) must be mastered');
+
+  // CASE E — Conditionals catalog lookup: requesting Intermediate Conditionals returns tasks (not [])
+  const caseEProblems = getFallbackProblems({ language: 'Python', concept: 'Conditionals', difficulty: 'Intermediate' });
+  assert.ok(caseEProblems.length > 0, 'CASE E: Conditionals catalog lookup for Intermediate must return task(s), not []');
+
+  // CASE F — Banner/Card Consistency: unmastered progress MUST NOT evaluate as mastered
+  assert.equal(isConceptMastered(caseC, 'Python', 'Loops'), false, 'CASE F: Banner/card consistency — unmastered progress returns false');
 
   console.log('PASS profileLogic unit tests');
 }
