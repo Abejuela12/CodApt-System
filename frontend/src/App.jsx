@@ -138,11 +138,10 @@ function App() {
 
   const handleCompleteTask = (language, concept, taskId) => {
     setProgress(prev => {
-      const catalogCount = getConceptTotalTaskCount(language, concept, selectedLevel || 'Beginner');
       const existing = prev?.[language]?.[concept] || {};
-      const totalTasks = catalogCount;
+      const totalTasks = existing.totalTasks;
       const tasksCompleted = Math.max(existing.tasksCompleted || 0, taskId);
-      const successRate = Math.round((tasksCompleted / totalTasks) * 100);
+      const successRate = existing.successRate || 0;
       const next = {
         ...prev,
         [language]: {
@@ -151,8 +150,10 @@ function App() {
             ...existing,
             tasksCompleted,
             totalTasks,
-            successRate: Math.max(existing.successRate || 0, successRate),
-            mastered: tasksCompleted >= totalTasks && successRate >= 60,
+            successRate,
+            mastered: totalTasks
+              ? tasksCompleted >= totalTasks && successRate >= 60
+              : false,
           }
         }
       };
