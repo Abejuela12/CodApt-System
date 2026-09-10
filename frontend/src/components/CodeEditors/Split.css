@@ -115,3 +115,33 @@ aside {
   line-height: 1.6 !important;
   font-feature-settings: "liga" 0 !important; /* Disable ligatures */
 }
+
+@media (max-width: 480px) {
+  #root > .App > div > header {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  #root > .App > div > header img {
+    height: 35px !important;
+  }
+
+  .gutter.gutter-vertical {
+    height: 6px !important;
+    min-height: 6px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  #root > .App > div > div > div:first-child {
+    flex-direction: column !important;
+  }
+
+  #root > .App > div > div > div:first-child > :not(.gutter) {
+    width: 100% !important;
+  }
+  
+  #root > .App > div > div > div:first-child > :nth-child(3) .gutter.gutter-vertical {
+    background-color: transparent !important;
+  }
+}

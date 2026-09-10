@@ -135,6 +135,9 @@ const CodeEditor = ({
   const [showAssessment, setShowAssessment] = useState(false);
   const [showMastery, setShowMastery]       = useState(false);
   const [tasksLoading, setTasksLoading]     = useState(true);
+  const [isMobileEditor, setIsMobileEditor] = useState(
+    () => window.matchMedia('(max-width: 600px)').matches
+  );
   const [attempts, setAttempts]   = useState(0);
   const [startTime]               = useState(Date.now());
   const [timeSpent, setTimeSpent] = useState(0);
@@ -413,6 +416,16 @@ const CodeEditor = ({
   };
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 600px)');
+    const handleChange = (event) => setIsMobileEditor(event.matches);
+
+    setIsMobileEditor(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
     const fetchTasks = async () => {
       setTasksLoading(true);
       try {
@@ -550,7 +563,7 @@ const CodeEditor = ({
 
       {/* ── Main Content ── */}
       <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-        <Split style={{ display:'flex', flexDirection:'row', width:'100%', height:'100%' }} sizes={[45,55]} minSize={200} gutterSize={12} direction="horizontal" gutterStyle={() => ({ backgroundColor:'#1e3a8a', cursor:'col-resize' })}>
+        <Split style={{ display:'flex', flexDirection:'row', width:'100%', height:'100%' }} sizes={isMobileEditor ? [40,60] : [45,55]} minSize={200} gutterSize={12} direction={isMobileEditor ? 'vertical' : 'horizontal'} gutterStyle={() => ({ backgroundColor:'#1e3a8a', cursor:'col-resize' })}>
 
           {/* Left Panel */}
           <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>

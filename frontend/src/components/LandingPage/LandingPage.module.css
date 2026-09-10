@@ -9,24 +9,26 @@
 /* Navbar */
 .navbar {
   background-color: var(--navbar-bg);
-  padding: 10px 50px;
+  padding: 15px 50px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid var(--navbar-border);
+  border-bottom: 1px solid var(--navbar-border);
+  min-height: 70px;
+  box-sizing: border-box;
   z-index: 10;
   transition: all 0.3s ease;
 }
 
 .logoImg {
-  height: 45px;
+  height: 50px;
   cursor: pointer;
 }
 
 .navRight {
   display: flex;
   align-items: center;
-  gap: 25px;
+  gap: 20px;
 }
 
 .themeToggle {
@@ -186,6 +188,18 @@
 
 /* Responsive adjustment for small screens */
 @media (max-width: 768px) {
+  .navbar {
+    padding: 15px 20px;
+  }
+
+  .logoImg {
+    height: 40px;
+  }
+
+  .navRight {
+    gap: 15px;
+  }
+
   .footerContent {
     flex-direction: column;
     gap: 20px;
@@ -194,5 +208,25 @@
   
   .footerRight {
     gap: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar {
+    padding: 12px 16px;
+  }
+
+  .logoImg {
+    height: 35px;
+  }
+
+  .navRight {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 400px) {
+  .logoImg {
+    height: 30px;
   }
 }

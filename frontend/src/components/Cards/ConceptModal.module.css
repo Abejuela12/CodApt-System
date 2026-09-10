@@ -499,8 +499,13 @@
 @media (max-width:768px){
 
   .modal {
-    width: 95%;
-    padding: 20px;
+    width: calc(100% - 24px);
+    box-sizing: border-box;
+    padding: 20px 16px;
+  }
+
+  .swiperContainer {
+    overflow: hidden;
   }
 
   .modalTitle {
@@ -508,8 +513,8 @@
   }
 
   .conceptCard {
-    width: 220px;
-    height: 280px;
+    width: min(200px, calc(100vw - 64px));
+    height: 250px;
   }
 
   .cardIcon {
