@@ -808,13 +808,17 @@ app.get('/api/progress/:userId', async (req, res) => {
       [userId]
     );
 
-    const { getConceptTotalTaskCount } = require('./utils/problemCatalog');
     const progress = {};
     rows.forEach(row => {
       if (!progress[row.language]) progress[row.language] = {};
       const tasksCompleted = row.tasks_completed;
-      const catalogCount = getConceptTotalTaskCount(row.language, row.concept, row.performance_level || 'Beginner');
-      const totalTasks = catalogCount;
+      // Trust user_profiles.total_tasks directly — /api/submit already keeps
+      // this column accurate on every write via a live COUNT(*) against the
+      // problems table. No need to re-derive it here from a static fallback
+      // catalog or from performance_level (which is a different taxonomy
+      // than problem_tier and would cause /api/submit and /api/progress to
+      // disagree on the same concept).
+      const totalTasks = row.total_tasks;
       const successRate = Math.round(row.success_rate * 100);
       progress[row.language][row.concept] = {
         tasksCompleted,
