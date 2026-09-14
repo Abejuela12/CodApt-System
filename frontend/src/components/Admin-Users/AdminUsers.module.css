@@ -624,6 +624,25 @@
     border-color: #2D58A6;
 }
 
+@media (max-width: 767px) {
+    .usersPanelWrapper {
+        padding: 0 16px 32px;
+    }
+
+    .tableScrollArea {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .userTable {
+        min-width: 385px;
+    }
+
+    .detailsPanel {
+        width: min(400px, 100vw);
+    }
+}
+
 /* Dark Mode Styles */
 [data-theme="dark"] .usersPanelWrapper {
     background-color: #1a1a2e;

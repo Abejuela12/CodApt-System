@@ -417,6 +417,68 @@
     justify-content: center;
 }
 
+@media (max-width: 767px) {
+    .coursesPanelWrapper {
+        padding: 0 16px 32px;
+    }
+
+    .statsRow {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .statCard {
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+        flex: none;
+    }
+
+    .filterRow {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .searchWrapper {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+        margin-right: 0;
+    }
+
+    .filterGroup {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 100%;
+        flex: 0 0 auto;
+    }
+
+    .filterSelect {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    .tabContainer {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .tabBtn {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 16px;
+        flex: 1 1 auto;
+        white-space: nowrap;
+    }
+}
+
 /* Dark Mode Styles */
 [data-theme="dark"] .coursesPanelWrapper {
     background-color: #1a1a2e;

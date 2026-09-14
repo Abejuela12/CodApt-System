@@ -14,6 +14,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
   const [avgScore, setAvgScore] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Extract current view from URL path or default to dashboard
   const currentView = location.pathname.includes('/admin/users') ? 'users'
@@ -82,6 +83,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
       settings: '/admin/settings'
     };
     navigate(paths[view] || '/admin');
+    setIsMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -94,7 +96,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
   const dashboardUsers = users.slice(0, 4);
 
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} ${isMobileMenuOpen ? styles.mobileMenuOpen : ''}`}>
       {/* Sidebar Navigation */}
       <aside className={styles.sidebar}>
         <div className={styles.logo}>
@@ -134,9 +136,27 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
         </nav>
       </aside>
 
+      {isMobileMenuOpen && (
+        <button
+          className={styles.mobileBackdrop}
+          aria-label="Close admin navigation"
+          onClick={() => setIsMobileMenuOpen(false)}
+          type="button"
+        />
+      )}
+
       <main className={styles.mainWrapper}>
         {/* Top Header */}
         <header className={`${styles.topHeader} ${styles.navbar}`}>
+          <button
+            className={styles.mobileMenuToggle}
+            aria-label={isMobileMenuOpen ? 'Close admin navigation' : 'Open admin navigation'}
+            aria-expanded={isMobileMenuOpen}
+            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            type="button"
+          >
+            {isMobileMenuOpen ? '✕' : '☰'}
+          </button>
           <div className={styles.navActions}>
             <div className={styles.nameBadge}>{userData?.username || 'Admin'}</div>
             <button className={styles.themeToggle} onClick={toggleTheme} type="button">

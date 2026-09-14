@@ -167,6 +167,46 @@
     border-radius: 50%;
 }
 
+@media (max-width: 767px) {
+    .container {
+        padding: 0 16px 32px;
+    }
+
+    .filterBar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dropdown,
+    .generateBtn {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .statsRow,
+    .bottomSection {
+        flex-direction: column;
+    }
+
+    .statCard,
+    .topicsCard,
+    .pieCard {
+        min-width: 0;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .mainChartCard {
+        padding: 12px;
+    }
+
+    .chartInner {
+        min-width: 0;
+        padding: 8px;
+        overflow: hidden;
+    }
+}
+
 /* Dark Mode Styles */
 [data-theme="dark"] .container {
     background-color: #1a1a2e;

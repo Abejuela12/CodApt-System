@@ -14,6 +14,11 @@
   flex-shrink: 0;
 }
 
+.mobileMenuToggle,
+.mobileBackdrop {
+  display: none;
+}
+
 .logo {
   padding: 8px;
   background: white;
@@ -236,6 +241,82 @@
   border-radius: 10px;
   font-weight: bold;
   cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  .container {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(280px, 85vw);
+    height: 100vh;
+    z-index: 1100;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .mobileMenuOpen .sidebar {
+    transform: translateX(0);
+  }
+
+  .mainWrapper {
+    width: 100%;
+    min-width: 0;
+    height: 100vh;
+  }
+
+  .topHeader {
+    justify-content: space-between;
+    padding: 0 16px;
+  }
+
+  .mobileMenuToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 24px;
+    cursor: pointer;
+  }
+
+  .mobileBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    border: none;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .content {
+    padding: 20px 16px 28px;
+  }
+
+  .statsGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .statCard {
+    padding: 20px;
+  }
+
+  .activityCard {
+    padding: 16px;
+  }
+
+  .activityTable {
+    padding: 14px;
+  }
 }
 
 /* Dark Mode Styles */
