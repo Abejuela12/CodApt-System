@@ -8,6 +8,7 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
   const [formData, setFormData]           = useState({ email: '', password: '' });
   const [error, setError]                 = useState('');
   const [loading, setLoading]             = useState(false);
+  const [showPassword, setShowPassword]   = useState(false);
   
 
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -173,14 +174,37 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  className={styles.inputField}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
+                <div className={styles.passwordInputWrap}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Password"
+                    className={styles.inputField}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                        <path d="M3 3l18 18" />
+                        <path d="M10.58 10.58a2 2 0 0 0 2.84 2.84" />
+                        <path d="M9.88 4.78A10.7 10.7 0 0 1 12 4.5c4.5 0 8.2 2.9 9.4 7.2a14.8 14.8 0 0 1-3.2 4.7" />
+                        <path d="M6.2 6.2A14.2 14.2 0 0 0 2.6 11.7c1.2 4.3 4.9 7.2 9.4 7.2a10.7 10.7 0 0 0 3.1-.5" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
 
                 {error && (
                   <p style={{ color: '#ff6b6b', fontSize: '13px', marginBottom: '4px' }}>

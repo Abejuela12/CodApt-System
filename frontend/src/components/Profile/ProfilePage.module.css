@@ -670,6 +670,92 @@
   cursor: wait;
 }
 
+/* Delete confirmation modal */
+.deleteConfirmCard {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(52,152,219,0.4) !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
+  width: min(420px, calc(100vw - 32px)) !important;
+  max-height: min(300px, calc(100vh - 32px)) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+}
+
+.deleteConfirmHeader {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 20px 20px 12px !important;
+  border-bottom: 1px solid rgba(52,152,219,0.2) !important;
+  background: linear-gradient(135deg, #eff6ff, #fde68a) !important;
+  box-sizing: border-box !important;
+}
+
+.deleteConfirmTitle {
+  margin: 0 !important;
+  font-size: clamp(20px, 2vw, 24px) !important;
+  font-weight: 900 !important;
+  color: #1e3a5f !important;
+  text-align: center !important;
+}
+
+.deleteConfirmBody {
+  padding: 16px 24px 10px !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+}
+
+.deleteConfirmText {
+  margin: 0 !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  color: #475569 !important;
+  text-align: center !important;
+}
+
+.deleteConfirmActions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  padding: 16px 20px 22px !important;
+  background: #ffffff !important;
+  box-sizing: border-box !important;
+  flex-wrap: wrap !important;
+}
+
+.deleteConfirmCancel {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  border: none !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  min-width: 90px !important;
+}
+
+.deleteConfirmDelete {
+  background: #dc2626 !important;
+  color: white !important;
+  border: none !important;
+  padding: 10px 18px !important;
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  font-size: 13px !important;
+  min-width: 120px !important;
+}
+
+.deleteConfirmDelete:disabled {
+  opacity: 0.75 !important;
+  cursor: wait !important;
+}
+
 /* Floating "Saved" pop-out toast — fixed to the corner of the viewport,
    independent of the modal, so it doesn't take up panel space. */
 .saveToast {

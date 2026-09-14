@@ -47,6 +47,7 @@ const ProfilePage = ({
   const [showAnalysis, setShowAnalysis]   = useState(false);
   const [isAnalyzing,  setIsAnalyzing]    = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isSaving, setIsSaving]          = useState(false);
   const [isDeleting, setIsDeleting]      = useState(false);
   const [saveError, setSaveError]        = useState('');
@@ -103,16 +104,16 @@ const ProfilePage = ({
 
   const handleDeleteAccount = async () => {
     if (!userData?.id) return;
-    const confirmed = window.confirm('Delete your account permanently? This action cannot be undone.');
-    if (!confirmed) return;
 
     setIsDeleting(true);
     setDeleteError('');
     try {
       await onDeleteAccount();
+      setShowDeleteConfirm(false);
       setShowProfileModal(false);
     } catch (err) {
       setDeleteError(err?.message || 'Unable to delete account right now.');
+    } finally {
       setIsDeleting(false);
     }
   };
@@ -343,7 +344,7 @@ const ProfilePage = ({
                   </div>
 
                   <div className={styles.deleteAccountRow}>
-                    <button type="button" className={styles.deleteAccountBtn} onClick={handleDeleteAccount} disabled={isDeleting}>
+                    <button type="button" className={styles.deleteAccountBtn} onClick={() => setShowDeleteConfirm(true)} disabled={isDeleting}>
                       {isDeleting ? 'Deleting...' : 'Delete Account'}
                     </button>
                   </div>
@@ -351,6 +352,27 @@ const ProfilePage = ({
                   {saveError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{saveError}</p>}
                   {deleteError && <p className={styles.saveStatus} style={{ color: '#f87171' }}>{deleteError}</p>}
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirm && (
+          <div className={styles.modalOverlay} onClick={() => setShowDeleteConfirm(false)}>
+            <div className={styles.deleteConfirmCard} onClick={e => e.stopPropagation()}>
+              <div className={styles.deleteConfirmHeader}>
+                <h2 className={styles.deleteConfirmTitle}>Delete Account?</h2>
+              </div>
+              <div className={styles.deleteConfirmBody}>
+                <p className={styles.deleteConfirmText}>Are you sure you want to delete your account? This action cannot be undone.</p>
+              </div>
+              <div className={styles.deleteConfirmActions}>
+                <button type="button" className={styles.deleteConfirmCancel} onClick={() => setShowDeleteConfirm(false)}>
+                  Cancel
+                </button>
+                <button type="button" className={styles.deleteConfirmDelete} onClick={handleDeleteAccount} disabled={isDeleting}>
+                  {isDeleting ? 'Deleting...' : 'Delete Account'}
+                </button>
               </div>
             </div>
           </div>

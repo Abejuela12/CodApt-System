@@ -4,7 +4,7 @@ import ThemeToggle from '../shared/ThemeToggle';
 
 // ─── Replace this with your real Google Client ID ───────────────────────────
 // Get it from: https://console.cloud.google.com → APIs & Services → Credentials
- 
+
 // ────────────────────────────────────────────────────────────────────────────
 
 import { API_BASE_URL } from '../../config';
@@ -13,8 +13,10 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
   const [formData, setFormData]           = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError]                 = useState('');
   const [loading, setLoading]             = useState(false);
-
-  
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsAgreed, setTermsAgreed]     = useState(false);
+  const [showPassword, setShowPassword]   = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   /* ── Email / Password Sign Up ── */
   const handleSubmit = async (e) => {
@@ -60,7 +62,7 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
     }
   };
 
-  
+
 
   return (
     <div className={styles.container}>
@@ -94,22 +96,68 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
             />
-            <input
-              type="password"
-              placeholder="Password"
-              className={styles.inputField}
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              className={styles.inputField}
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              required
-            />
+            <div className={styles.passwordInputWrap}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                className={styles.inputField}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                    <path d="M3 3l18 18" />
+                    <path d="M10.58 10.58a2 2 0 0 0 2.84 2.84" />
+                    <path d="M9.88 4.78A10.7 10.7 0 0 1 12 4.5c4.5 0 8.2 2.9 9.4 7.2a14.8 14.8 0 0 1-3.2 4.7" />
+                    <path d="M6.2 6.2A14.2 14.2 0 0 0 2.6 11.7c1.2 4.3 4.9 7.2 9.4 7.2a10.7 10.7 0 0 0 3.1-.5" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <div className={styles.passwordInputWrap}>
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm Password"
+                className={styles.inputField}
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                required
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                aria-pressed={showConfirmPassword}
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? (
+                  <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                    <path d="M3 3l18 18" />
+                    <path d="M10.58 10.58a2 2 0 0 0 2.84 2.84" />
+                    <path d="M9.88 4.78A10.7 10.7 0 0 1 12 4.5c4.5 0 2.9 2.9 9.4 7.2a14.8 14.8 0 0 1-3.2 4.7" />
+                    <path d="M6.2 6.2A14.2 14.2 0 0 0 2.6 11.7c1.2 4.3 4.9 7.2 9.4 7.2a10.7 10.7 0 0 0 3.1-.5" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className={styles.eyeIcon} aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
 
             {error && (
               <p style={{ color: '#ff6b6b', fontSize: '13px', marginBottom: '4px' }}>
@@ -117,11 +165,21 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
               </p>
             )}
 
+            <label className={styles.termsRow}>
+              <input
+                type="checkbox"
+                className={styles.termsCheck}
+                checked={termsAgreed}
+                onChange={(e) => setTermsAgreed(e.target.checked)}
+              />
+              <span className={styles.termsText}>I agree to the Terms and Conditions</span>
+            </label>
+
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={loading}
-              style={{ opacity: loading ? 0.75 : 1 }}
+              disabled={loading || !termsAgreed}
+              style={{ opacity: loading || !termsAgreed ? 0.75 : 1 }}
             >
               {loading ? 'Creating account…' : 'Sign Up'}
             </button>
@@ -129,7 +187,9 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
 
           <p className={styles.footerText}>
             By signing up, I agree to CodApt{' '}
-            <a href="#" className={styles.link}>Terms</a>
+            <button type="button" className={styles.link} onClick={() => setShowTermsModal(true)}>
+              Terms
+            </button>
           </p>
 
           <p className={styles.footerText}>
@@ -137,7 +197,60 @@ const SignUp = ({ isDarkMode, toggleTheme, onSignUp, onLogin, onHome }) => {
             <span className={styles.link} onClick={onLogin}>Login</span>
           </p>
 
-          
+          {showTermsModal && (
+            <div className={styles.termsModalOverlay} onClick={() => setShowTermsModal(false)}>
+              <div className={styles.termsModalCard} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.termsModalHeader}>
+                  <h2 className={styles.termsModalTitle}>Terms and Conditions</h2>
+                  <button
+                    type="button"
+                    className={styles.termsModalClose}
+                    aria-label="Close Terms and Conditions"
+                    onClick={() => setShowTermsModal(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className={styles.termsModalContent}>
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>Acceptance of Terms</h3>
+                    <p className={styles.termsTextBlock}>By creating a CodApt account, the user agrees to follow these Terms.</p>
+                  </section>
+
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>Use of CodApt</h3>
+                    <p className={styles.termsTextBlock}>CodApt is a coding-learning system intended for learning and practice.</p>
+                    <p className={styles.termsTextBlock}>Users should use the system responsibly and for its intended purpose.</p>
+                  </section>
+
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>User Account</h3>
+                    <p className={styles.termsTextBlock}>Users are responsible for the information they provide.</p>
+                    <p className={styles.termsTextBlock}>Users should keep their account credentials secure.</p>
+                  </section>
+
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>Learning Content</h3>
+                    <p className={styles.termsTextBlock}>Coding lessons, problems, and related content are provided for educational purposes.</p>
+                    <p className={styles.termsTextBlock}>Users should not misuse the platform or attempt to disrupt its operation.</p>
+                  </section>
+
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>User Responsibilities</h3>
+                    <p className={styles.termsTextBlock}>Users must not intentionally interfere with the system or misuse other users' accounts or data.</p>
+                    <p className={styles.termsTextBlock}>Users should provide accurate registration information.</p>
+                  </section>
+
+                  <section className={styles.termsSection}>
+                    <h3 className={styles.termsSectionTitle}>Changes to These Terms</h3>
+                    <p className={styles.termsTextBlock}>CodApt may update these Terms when necessary.</p>
+                    <p className={styles.termsTextBlock}>Continued use of the service after changes means the updated Terms apply.</p>
+                  </section>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
