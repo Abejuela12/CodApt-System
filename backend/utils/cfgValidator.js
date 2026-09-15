@@ -177,6 +177,76 @@ function isConstructUsed(code, language, construct) {
   }
 }
 
+function parseJavaLiteral(value) {
+  const literal = value.trim().replace(/[.,]$/, '');
+  if (/^"(?:\\.|[^"\\])*"$/.test(literal)) return literal;
+  if (/^-?\d+(?:\.\d+)?$/.test(literal)) return literal;
+  return null;
+}
+
+function parseJavaVariableDeclarations(instruction) {
+  const declarations = [];
+  const addDeclaration = (type, name, value) => {
+    const literal = parseJavaLiteral(value);
+    if (literal) declarations.push({ type, name, value: literal });
+  };
+
+  const calledPattern = /(?:\bdeclare\s+|\band\s+)(?:a|an)\s+(String|int|double)\s+variable\s+called\s+(\w+)\s+with(?:\s+the)?\s+value\s+((?:"(?:\\.|[^"\\])*"|(?:-?\d+(?:\.\d+)?)))/gi;
+  let match;
+  while ((match = calledPattern.exec(instruction)) !== null) {
+    addDeclaration(match[1], match[2], match[3]);
+  }
+
+  const pluralPattern = /\b(?:Declare|and)\s+(String|int|double)\s+variables?\s+(.+?)(?=\.(?:\s|$))/gi;
+  while ((match = pluralPattern.exec(instruction)) !== null) {
+    const assignmentPattern = /(\w+)\s*=\s*((?:"(?:\\.|[^"\\])*"|\-?\d+(?:\.\d+)?))(?=\s*(?:,|\band\b|$))/g;
+    let assignment;
+    while ((assignment = assignmentPattern.exec(match[2])) !== null) {
+      addDeclaration(match[1], assignment[1], assignment[2]);
+    }
+  }
+
+  const firstType = declarations[0]?.type;
+  const anotherPattern = /\band\s+another\s+called\s+(\w+)\s+with\s+value\s+((?:"(?:\\.|[^"\\])*"|\-?\d+(?:\.\d+)?))/gi;
+  while ((match = anotherPattern.exec(instruction)) !== null) {
+    if (!firstType) return { supported: false, declarations: [] };
+    addDeclaration(firstType, match[1], match[2]);
+  }
+
+  const derivedNames = [...instruction.matchAll(/\bstore\s+(?:it|the result)\s+in\s+(?:a\s+)?variable\s+called\s+(\w+)/gi)]
+    .map(derived => derived[1]);
+
+  if (declarations.length === 0) return { supported: false, declarations: [] };
+  return { supported: true, declarations, derivedNames };
+}
+
+function validateJavaVariables(code, instruction) {
+  const parsed = parseJavaVariableDeclarations(instruction);
+  if (!parsed.supported) {
+    return {
+      valid: false,
+      feedback: ['⚠ This Java Variables task uses an unsupported declaration format and cannot be validated safely.']
+    };
+  }
+
+  const source = stripComments(code, 'java');
+  const declarationMissing = parsed.declarations.some(({ type, name, value }) => {
+    const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${type}\\s+${name}\\s*=\\s*${escapedValue}\\s*;`);
+    return !pattern.test(source);
+  });
+  const derivedMissing = parsed.derivedNames.some(name =>
+    !new RegExp(`\\b(?:String|int|double)\\s+${name}\\s*=`, 'i').test(source)
+  );
+
+  return {
+    valid: !declarationMissing && !derivedMissing,
+    feedback: !declarationMissing && !derivedMissing
+      ? []
+      : ['⚠ This Java Variables task requires the declared variables and initial values from the instructions.']
+  };
+}
+
 // ─── hardcoding detection ────────────────────────────────────────
 
 function isHardcoded(code, language, expectedOutput) {
@@ -333,14 +403,14 @@ function countSyntaxErrors(code, language) {
 // ─── main export ─────────────────────────────────────────────────
 
 /**
- * validateCFG(code, language, requiredConstruct, expectedOutput)
+ * validateCFG(code, language, requiredConstruct, expectedOutput, context)
  */
-function validateCFG(code, language, requiredConstruct, expectedOutput) {
+function validateCFG(code, language, requiredConstruct, expectedOutput, context = {}) {
   const feedback         = [];
   let   structuralErrors = 0;
 
   // 1. Required construct check
-  const constructUsed = isConstructUsed(code, language, requiredConstruct);
+  let constructUsed = isConstructUsed(code, language, requiredConstruct);
 
   if (requiredConstruct && !constructUsed) {
     structuralErrors++;
@@ -360,6 +430,15 @@ function validateCFG(code, language, requiredConstruct, expectedOutput) {
       `⚠ This task requires ${label}. ` +
       `Make sure you are actually using it, not just mentioning it in a comment or string.`
     );
+  }
+
+  if (language === 'Java' && context.concept === 'Variables') {
+    const javaVariablesResult = validateJavaVariables(code, context.instruction || '');
+    if (!javaVariablesResult.valid) {
+      constructUsed = false;
+      structuralErrors++;
+      javaVariablesResult.feedback.forEach(msg => feedback.push(msg));
+    }
   }
 
   // 2. Hardcoding check

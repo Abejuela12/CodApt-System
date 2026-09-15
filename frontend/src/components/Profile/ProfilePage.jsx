@@ -128,17 +128,21 @@ const ProfilePage = ({
   const conceptRows = CONCEPTS.map(concept => {
     const stored         = getConceptProgress(propProgress?.[selectedLang] || {}, concept);
     const tasksCompleted = stored?.tasksCompleted ?? 0;
+    const totalTasks     = stored?.totalTasks || 3;
     const success        = stored?.successRate ?? 0;
     const hasData        = !!stored && (tasksCompleted > 0 || success > 0 || stored?.mastered === true || stored?.isMastered === true);
     const isMastered     = hasData && isConceptMastered(propProgress, selectedLang, concept);
     const displaySuccessRate = Math.min(100, Math.max(0, Math.round(Number(success) || 0)));
     const masteryPct     = hasData ? displaySuccessRate : 0;
+    const taskCompletionPct = hasData && totalTasks > 0
+      ? Math.min(100, Math.round((tasksCompleted / totalTasks) * 100))
+      : 0;
     const lvl = !hasData
       ? { label: 'Not Started', color: '#64748b' }
       : isMastered
         ? { label: 'Adv', color: '#22c55e' }
-        : getConceptLevel({ tasksCompleted: Math.max(tasksCompleted, 1), totalTasks: stored?.totalTasks || 3, successRate: success });
-    return { concept, success, masteryPct, isMastered, hasData, lvl };
+        : getConceptLevel({ tasksCompleted: Math.max(tasksCompleted, 1), totalTasks, successRate: success });
+    return { concept, tasksCompleted, totalTasks, success, masteryPct, taskCompletionPct, isMastered, hasData, lvl };
   });
 
   const tickFormatter = v => `${Math.round(v)}%`;
@@ -250,7 +254,7 @@ const ProfilePage = ({
                   No activity in {selectedLang} yet. Start a lesson!
                 </div>
               ) : (
-                conceptRows.map(({ concept, success, masteryPct, isMastered, hasData, lvl }) => (
+                conceptRows.map(({ concept, tasksCompleted, totalTasks, success, masteryPct, taskCompletionPct, isMastered, hasData, lvl }) => (
                   <div key={concept} className={styles.conceptCard} style={{ opacity: hasData ? 1 : 0.4 }}>
                     <div className={styles.conceptHeader}>
                       <h4 className={styles.conceptName}>{concept}</h4>
@@ -260,12 +264,12 @@ const ProfilePage = ({
                     </div>
                     <div className={styles.conceptBar}>
                       <div className={styles.conceptBarFill} style={{
-                        width: isMastered ? '100%' : `${masteryPct}%`,
-                        background: isMastered ? '#4ade80' : masteryPct >= 50 ? '#facc15' : masteryPct > 0 ? '#60a5fa' : '#334155'
+                        width: `${taskCompletionPct}%`,
+                        background: isMastered ? '#4ade80' : taskCompletionPct >= 50 ? '#facc15' : taskCompletionPct > 0 ? '#60a5fa' : '#334155'
                       }} />
                     </div>
                     <p className={styles.conceptRate}>
-                      {hasData ? `${masteryPct}% success rate` : 'Not attempted yet'}
+                      {hasData ? `${taskCompletionPct}%` : 'Not attempted yet'}
                     </p>
                   </div>
                 ))

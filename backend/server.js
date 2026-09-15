@@ -425,7 +425,10 @@ app.post('/api/submit', async (req, res) => {
     const expectedOutput = problem.expected_output || '';
 
     // ── 2. CFG validation ────────────────────────────────────────
-    const cfgResult = validateCFG(code, language, requiredConstruct, expectedOutput);
+    const cfgResult = validateCFG(code, language, requiredConstruct, expectedOutput, {
+      concept,
+      instruction: problem.instruction || ''
+    });
     const syntaxErrors = cfgResult.syntaxErrors;
     const structuralErrors = cfgResult.structuralErrors;
     const cfgFeedback = cfgResult.feedback;
