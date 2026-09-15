@@ -589,11 +589,11 @@ const CodeEditor = ({
                         #{concept}
                       </div>
                       {task?.explanation && (
-                        <div style={{ fontSize:'16px', color:'#e2e8f0', lineHeight:'1.7', marginBottom:'24px' }} dangerouslySetInnerHTML={{ __html: task.explanation }} />
+                        <div className="example-area" style={{ fontSize:'16px', color:'#e2e8f0', lineHeight:'1.7', marginBottom:'24px' }} dangerouslySetInnerHTML={{ __html: task.explanation }} />
                       )}
                       <div style={{ background:'linear-gradient(135deg,rgba(59,130,246,0.1) 0%,rgba(99,102,241,0.1) 100%)', border:'1px solid rgba(59,130,246,0.3)', borderRadius:'12px', padding:'24px', marginBottom:'24px' }}>
                         <h3 style={{ fontSize:'20px', fontWeight:'700', color:'#3b82f6', margin:'0 0 16px 0' }}>Instructions</h3>
-                        <div style={{ fontSize:'16px', color:'#f1f5f9', lineHeight:'1.7', whiteSpace:'pre-line' }}>{task?.instruction || '—'}</div>
+                        <div className="instructions-area" style={{ fontSize:'16px', color:'#f1f5f9', lineHeight:'1.7', whiteSpace:'pre-line' }}>{task?.instruction || '—'}</div>
                       </div>
                       <div style={{ backgroundColor:'rgba(34,197,94,0.15)', border:'1px solid rgba(34,197,94,0.4)', borderRadius:'10px', padding:'20px' }}>
                         <div style={{ color:'#22c55e', fontWeight:'700', fontSize:'16px', marginBottom:'12px' }}>✅ Expected Output</div>

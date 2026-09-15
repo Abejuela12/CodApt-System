@@ -93,6 +93,11 @@ div:hover > .editorDropdown {
 
 
 /* Instructions panel */
+.example-area,
+.instructions-area {
+  user-select: none;
+}
+
 .instructions-panel {
   white-space: pre-line !important;
   line-height: 1.6 !important;
