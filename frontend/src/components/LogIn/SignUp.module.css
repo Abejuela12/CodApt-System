@@ -277,6 +277,14 @@
   padding-right: 50px !important;
 }
 
+.passwordInputWrap .inputField::-ms-reveal {
+  display: none !important;
+}
+
+.passwordInputWrap .inputField::-webkit-textfield-decoration-container {
+  display: none !important;
+}
+
 /* Terms agreement row */
 .termsRow {
   display: flex !important;

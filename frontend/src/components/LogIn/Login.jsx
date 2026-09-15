@@ -9,13 +9,6 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
   const [error, setError]                 = useState('');
   const [loading, setLoading]             = useState(false);
   const [showPassword, setShowPassword]   = useState(false);
-  
-
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminFormData, setAdminFormData]   = useState({ email: '', password: '' });
-  const [adminError, setAdminError]         = useState('');
-
-  
 
   /* ── Email / Password Login ── */
   const handleSubmit = async (e) => {
@@ -47,22 +40,6 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
       setError('Cannot reach the server. Make sure the backend is running.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  
-
-  /* ── Admin Login ── */
-  const handleAdminSubmit = (e) => {
-    e.preventDefault();
-    if (
-      adminFormData.email    === 'admin@codapt.com' &&
-      adminFormData.password === 'admin123'
-    ) {
-      setAdminError('');
-      onLogin({ isAdmin: true });
-    } else {
-      setAdminError('Invalid admin credentials.');
     }
   };
 
@@ -118,54 +95,9 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
         <div className={styles.authCard}>
           <img src="/Welcome.png" alt="Welcome!" className={styles.welcomeImage} />
 
-          {showAdminLogin ? (
-            /* ── Admin Form ── */
-            <form className={styles.form} onSubmit={handleAdminSubmit}>
-              <p style={{ color: '#ff6b6b', marginBottom: '10px', fontSize: '14px', fontWeight: '700' }}>
-                🔐 Admin Login
-              </p>
-
-              <input
-                type="email"
-                placeholder="Admin Email"
-                className={styles.inputField}
-                value={adminFormData.email}
-                onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
-                required
-              />
-              <input
-                type="password"
-                placeholder="Admin Password"
-                className={styles.inputField}
-                value={adminFormData.password}
-                onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
-                required
-              />
-
-              {adminError && (
-                <p style={{ color: '#ff6b6b', fontSize: '13px', marginBottom: '8px' }}>
-                  {adminError}
-                </p>
-              )}
-
-              <button type="submit" className={styles.submitBtn}>
-                Login as Admin
-              </button>
-
-              <p className={styles.footerText}>
-                <span
-                  className={styles.link}
-                  onClick={() => { setShowAdminLogin(false); setAdminError(''); }}
-                >
-                  ← Back to User Login
-                </span>
-              </p>
-            </form>
-
-          ) : (
-            /* ── User Form ── */
-            <>
-              <form className={styles.form} onSubmit={handleSubmit}>
+          {/* ── User Form ── */}
+          <>
+            <form className={styles.form} onSubmit={handleSubmit}>
                 <input
                   type="email"
                   placeholder="Email"
@@ -212,38 +144,22 @@ const Login = ({ isDarkMode, toggleTheme, onLogin, onSignUp, onHome }) => {
                   </p>
                 )}
 
-                <button
-                  type="submit"
-                  className={styles.submitBtn}
-                  disabled={isAnyLoading}
-                  style={{ opacity: loading ? 0.75 : 1 }}
-                >
-                  {loading ? 'Logging in…' : 'Login'}
-                </button>
-              </form>
+            <button
+              type="submit"
+              className={styles.submitBtn}
+              disabled={isAnyLoading}
+              style={{ opacity: loading ? 0.75 : 1 }}
+            >
+              {loading ? 'Logging in…' : 'Login'}
+            </button>
+          </form>
 
-              <p className={styles.footerText}>
-                Don't have an account?{' '}
-                <span className={styles.link} onClick={onSignUp}>Sign Up</span>
-              </p>
-
-              
-
-              <hr style={{ marginTop: '20px', border: 'none', borderTop: '1px solid #ddd' }} />
-
-              <p className={styles.footerText} style={{ marginTop: '15px' }}>
-                Are you an admin?{' '}
-                <button
-                  className={styles.link}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  onClick={() => { setShowAdminLogin(true); setError(''); }}
-                >
-                  Login here
-                </button>
-              </p>
-            </>
-          )}
-        </div>
+          <p className={styles.footerText}>
+            Don't have an account?{' '}
+            <span className={styles.link} onClick={onSignUp}>Sign Up</span>
+          </p>
+        </>
+      </div>
       </main>
     </div>
   );

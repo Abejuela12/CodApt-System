@@ -322,7 +322,12 @@ function App() {
   };
 
   const handleLogin = async (loginData) => {
-    if (loginData?.isAdmin) { setIsAdmin(true); goToAdmin(); return; }
+    if (loginData?.role === 'admin') {
+      setIsAdmin(true);
+      goToAdmin();
+      return;
+    }
+
     setUserData(loginData);
     setSavedTaskIndices(readStoredTaskIndices(loginData?.id));
     await fetchAndSetProgress(loginData?.id);

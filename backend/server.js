@@ -211,7 +211,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // SUPABASE (pg): { rows } and $1, $2
     const { rows } = await db.query(
-      `SELECT id, name, username, email, photo
+      `SELECT id, name, username, email, photo, role
        FROM users WHERE email = $1 AND password_hash = $2`,
       [email, hashed]
     );
@@ -227,7 +227,8 @@ app.post('/api/auth/login', async (req, res) => {
         name: user.name,
         username: user.username,
         email: user.email,
-        photo: user.photo || null
+        photo: user.photo || null,
+        role: user.role || 'student'
       }
     });
   } catch (err) {
