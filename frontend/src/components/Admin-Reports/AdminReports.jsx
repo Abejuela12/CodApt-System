@@ -53,7 +53,7 @@ const AdminReports = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CodApt_Report_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `CodApt_Training_Data_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -98,7 +98,7 @@ const AdminReports = () => {
           onClick={handleGenerateAndDownload}
           disabled={isLoading}
         >
-          {isLoading ? 'Generating…' : 'Generate & Download Report'}
+          {isLoading ? 'Generating…' : 'Download User Training CSV'}
         </button>
       </div>
 

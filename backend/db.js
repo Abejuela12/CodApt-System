@@ -18,7 +18,7 @@ if (!databaseUrl) {
     on: () => {}
   };
 } else {
-  console.log('🔐 DATABASE_URL (first 50 chars):', databaseUrl.substring(0, 50) + '...');
+  console.log('🔐 Database URL configured.');
 
   db = new Pool({
     connectionString: databaseUrl,

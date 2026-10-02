@@ -239,7 +239,7 @@ const AdminDashboard = ({ isDarkMode, toggleTheme, userData, onProfileClick, onL
             </>
           )}
 
-          {currentView === 'users' && <UsersPanel users={users} />}
+          {currentView === 'users' && <UsersPanel users={users} isLoading={isLoading} error={error} />}
           {currentView === 'reports' && <AdminReports />}
           {currentView === 'content' && <AdminCourses />}
           {currentView === 'settings' && <AdminSettings userData={userData} onLogout={onLogout} />}

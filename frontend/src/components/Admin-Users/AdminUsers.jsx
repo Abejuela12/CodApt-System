@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styles from './AdminUsers.module.css';
-import { API_BASE_URL } from '../../config';
 
-const UsersPanel = ({ users: initialUsers = [] }) => {
+const UsersPanel = ({ users: initialUsers = [], isLoading, error }) => {
   const [users, setUsers] = useState(initialUsers);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
@@ -10,8 +9,6 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState('');
   const [editForm, setEditForm] = useState({ name: '', email: '' });
-  const [isLoading, setIsLoading] = useState(initialUsers.length === 0);
-  const [error, setError] = useState(null);
 
   const totalLearners = users.length;
   const activeRate = totalLearners ? Math.round((users.filter(u => !u.isBanned).length / totalLearners) * 100) : 0;
@@ -23,38 +20,7 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
       masteredCount: Number(user.masteredCount ?? 0),
       color: user.color || getAvatarColor(user.name)
     })));
-    if (initialUsers.length > 0) {
-      setIsLoading(false);
-      setError(null);
-    }
   }, [initialUsers]);
-
-  useEffect(() => {
-    if (initialUsers.length > 0) return;
-
-    const fetchUsers = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`${API_BASE_URL}/api/admin/users`, { cache: 'no-store' });
-        if (!response.ok) throw new Error('Failed to load admin users');
-        const data = await response.json();
-        setUsers(data.map(user => ({
-          ...user,
-          overallPct: Number(user.overallPct ?? 0),
-          masteredCount: Number(user.masteredCount ?? 0),
-          color: user.color || getAvatarColor(user.name)
-        })));
-        setError(null);
-      } catch (err) {
-        console.error('Admin users fetch error:', err);
-        setError('Unable to load users from the backend.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, [initialUsers.length]);
 
   const getAvatarColor = (name) => {
     const colors = ['#76D7A4', '#F1C40F', '#E74C3C', '#3498DB', '#9B59B6', '#5DADE2'];
@@ -142,7 +108,19 @@ const UsersPanel = ({ users: initialUsers = [] }) => {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                    Loading...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                    {error}
+                  </td>
+                </tr>
+              ) : filteredUsers.length > 0 ? (
                 filteredUsers.map((user, index) => (
                   <tr key={index} className={user.isBanned ? styles.bannedRow : ''}>
                     <td className={styles.userCell}>

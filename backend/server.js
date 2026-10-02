@@ -932,95 +932,77 @@ app.get('/api/admin/users', async (req, res) => {
       return exact || value;
     }
 
-    // For each user, fetch per-language stats + canonical mastery count
-    const enrichedUsers = await Promise.all(users.map(async (user) => {
-      // ── canonical mastery count for THIS user (user.id is in scope here) ──
-      // Fetch RAW rows (not a SQL COUNT) so we can normalize concept/language
-      // names in JS before counting. This makes the mastery count immune to
-      // any duplicate-spelling rows already sitting in the DB.
-      const { rows: rawProfileRows } = await db.query(
-        `SELECT language, concept, tasks_completed, total_tasks, success_rate
-         FROM user_profiles
-         WHERE user_id = $1`,
-        [user.id]
-      );
+    const { rows: profileRows } = await db.query(
+      `SELECT user_id, language, concept, tasks_completed, total_tasks, success_rate
+       FROM user_profiles
+       WHERE user_id = ANY($1)`,
+      [users.map(user => user.id)]
+    );
+    const profileRowsByUser = new Map();
+    profileRows.forEach(row => {
+      const userId = String(row.user_id);
+      if (!profileRowsByUser.has(userId)) profileRowsByUser.set(userId, []);
+      profileRowsByUser.get(userId).push(row);
+    });
 
+    const enrichedUsers = users.map(user => {
+      const rawProfileRows = profileRowsByUser.get(String(user.id)) || [];
       const masteredSet = new Set();
+      const languageStats = new Map();
+
       rawProfileRows.forEach(row => {
         const lang = normalizeLanguageName(row.language);
         const concept = normalizeConceptName(row.concept);
         const total = Number(row.total_tasks || 0);
         const completed = Number(row.tasks_completed || 0);
         const completionRate = total > 0 ? completed / total : 0;
-        const isMastered = total > 0 && completed >= total && completionRate >= 0.60;
-        if (isMastered) masteredSet.add(`${lang}::${concept}`);
+        if (total > 0 && completed >= total && completionRate >= 0.60) {
+          masteredSet.add(`${lang}::${concept}`);
+        }
+
+        const language = String(row.language || '').toLowerCase();
+        if (!languageStats.has(language)) {
+          languageStats.set(language, {
+            tasksCompleted: 0,
+            totalTasks: 0,
+            scoreTotal: 0,
+            scoreCount: 0
+          });
+        }
+        const stats = languageStats.get(language);
+        stats.tasksCompleted += completed;
+        stats.totalTasks += total;
+        if (row.success_rate !== null && row.success_rate !== undefined) {
+          stats.scoreTotal += Number(row.success_rate);
+          stats.scoreCount += 1;
+        }
       });
+
       const masteredCount = masteredSet.size;
       const overallPct = Math.round((masteredCount / TOTAL_POSSIBLE_CONCEPTS) * 100);
       const progressCategory =
         overallPct >= 75 ? 'Full Progress' :
           overallPct >= 25 ? 'Average' :
             'Below Average';
-
-      const { rows: langStats } = await db.query(
-        `SELECT
-           language,
-           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
-           COALESCE(SUM(total_tasks), 0) AS total_tasks,
-           CASE WHEN COALESCE(SUM(total_tasks), 0) > 0
-             THEN ROUND(AVG(success_rate) * 100)
-             ELSE 0 END AS score
-         FROM user_profiles
-         WHERE user_id = $1
-         GROUP BY language
-         ORDER BY language ASC`,
-        [user.id]
-      );
-
-      // Create score object for each language
-      const scores = {
-        python: 0,
-        javascript: 0,
-        java: 0
-      };
-
-      langStats.forEach(stat => {
-        const lang = (stat.language || '').toLowerCase();
-        if (lang === 'python') scores.python = Number(stat.score) || 0;
-        else if (lang === 'javascript') scores.javascript = Number(stat.score) || 0;
-        else if (lang === 'java') scores.java = Number(stat.score) || 0;
-      });
-
-      // Get language-specific progress details
-      const { rows: langProgress } = await db.query(
-        `SELECT
-           language,
-           COALESCE(SUM(tasks_completed), 0) AS tasks_completed,
-           COALESCE(SUM(total_tasks), 0) AS total_tasks
-         FROM user_profiles
-         WHERE user_id = $1
-         GROUP BY language
-         ORDER BY language ASC`,
-        [user.id]
-      );
-
+      const scores = { python: 0, javascript: 0, java: 0 };
       const languageDetails = {};
-      langProgress.forEach(lp => {
-        const lang = (lp.language || '').toLowerCase();
-        languageDetails[lang] = {
-          tasksCompleted: Number(lp.tasks_completed) || 0,
-          totalTasks: Number(lp.total_tasks) || 0
+
+      languageStats.forEach((stats, language) => {
+        languageDetails[language] = {
+          tasksCompleted: stats.tasksCompleted,
+          totalTasks: stats.totalTasks
         };
+        const score = stats.totalTasks > 0 && stats.scoreCount > 0
+          ? Math.round((stats.scoreTotal / stats.scoreCount) * 100)
+          : 0;
+        if (Object.hasOwn(scores, language)) scores[language] = score;
       });
 
-      const demoProgressColor = (() => {
-        const mappings = {
-          demo_average: '#10b981',
-          demo_full: '#3b82f6',
-          demo_quarter: '#f59e0b'
-        };
-        return mappings[user.username] || undefined;
-      })();
+      const demoProgressColor = ({
+        demo_average: '#10b981',
+        demo_full: '#3b82f6',
+        demo_quarter: '#f59e0b'
+      })[user.username];
 
       return {
         id: user.id,
@@ -1041,7 +1023,7 @@ app.get('/api/admin/users', async (req, res) => {
         overallPct,
         progressCategory
       };
-    }));
+    });
 
     res.json(enrichedUsers);
   } catch (err) {
@@ -1425,172 +1407,52 @@ app.get('/api/admin/reports', async (req, res) => {
 });
 
 /* ══════════════════════════════════════
-   API — DOWNLOAD RESEARCH DATA (Comprehensive CSV)
+  API — DOWNLOAD USER TRAINING DATA (train_data-compatible CSV)
    GET /api/admin/reports/download
 ══════════════════════════════════════ */
 app.get('/api/admin/reports/download', async (req, res) => {
   try {
-    // Fetch all submissions with user and problem data
-    let submissions = [];
-    try {
-      const { rows } = await db.query(
-        `SELECT
-           s.id,
-           u.name AS student_name,
-           u.email AS student_email,
-           p.title AS problem_title,
-           p.language,
-           p.concept,
-           p.difficulty,
-           p.problem_tier,
-           s.attempts,
-           s.time_spent,
-           s.is_correct,
-           s.syntax_errors,
-           s.structural_errors,
-           s.hint_used,
-           TO_CHAR(s.created_at, 'YYYY-MM-DD HH24:MI:SS') AS submission_time
-         FROM submissions s
-         JOIN users u ON s.user_id = u.id
-         JOIN problems p ON s.problem_id = p.id
-         ORDER BY s.created_at DESC`
-      );
-      submissions = rows || [];
-    } catch (err) {
-      console.warn('⚠️ Submissions query warning:', err.message);
-      submissions = [];
-    }
+    const selectedTimeframe = req.query.timeframe || 'all';
+    const selectedUser = req.query.user || 'all';
+    const profileWhere = buildProfileWhereClause(selectedTimeframe, selectedUser);
+    const { rows: profiles } = await db.query(
+      `SELECT
+         up.success_rate,
+         up.avg_attempts,
+         up.avg_time_spent,
+         up.syntax_errors,
+         up.structural_errors,
+         up.performance_level AS label
+       FROM user_profiles up
+       JOIN users u ON up.user_id = u.id
+       ${profileWhere}
+       ORDER BY u.name, up.language, up.concept`
+    );
 
-    // Fetch user performance profiles
-    let profiles = [];
-    try {
-      const { rows } = await db.query(
-        `SELECT
-           up.user_id,
-           u.name AS student_name,
-           u.email AS student_email,
-           up.language,
-           up.concept,
-           up.total_attempts,
-           up.tasks_completed,
-           up.total_tasks,
-           ROUND(up.success_rate * 100, 2) AS success_rate_percent,
-           ROUND(up.avg_time_spent, 2) AS avg_time_spent_sec,
-           ROUND(up.avg_attempts::numeric, 2) AS avg_attempts,
-           up.performance_level,
-           up.syntax_errors,
-           up.structural_errors
-         FROM user_profiles up
-         JOIN users u ON up.user_id = u.id
-         ORDER BY u.name, up.language, up.concept`
-      );
-      profiles = rows || [];
-    } catch (err) {
-      console.warn('⚠️ Profiles query warning:', err.message);
-      profiles = [];
-    }
+    const columns = [
+      'success_rate',
+      'avg_attempts',
+      'avg_time_spent',
+      'syntax_errors',
+      'structural_errors',
+      'label',
+    ];
+    const escapeCsvCell = value => {
+      const cell = value == null ? '' : String(value);
+      return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+    };
+    const csvContent = [
+      columns.join(','),
+      ...profiles.map(profile => columns.map(column => escapeCsvCell(profile[column])).join(',')),
+    ].join('\r\n');
 
-    // Fetch recommendations and effectiveness
-    let recommendations = [];
-    try {
-      const { rows } = await db.query(
-        `SELECT
-           r.user_id,
-           u.name AS student_name,
-           sp.title AS source_problem,
-           sp.difficulty AS source_difficulty,
-           sp.concept AS source_concept,
-           rp.title AS recommended_problem,
-           rp.difficulty AS recommended_difficulty,
-           rp.concept AS recommended_concept,
-           ROUND(r.similarity_score::numeric, 2) AS similarity_score,
-           r.explanation,
-           TO_CHAR(r.created_at, 'YYYY-MM-DD HH24:MI:SS') AS recommendation_time
-         FROM recommendations r
-         JOIN users u ON r.user_id = u.id
-         JOIN problems sp ON r.source_problem_id = sp.id
-         JOIN problems rp ON r.recommended_problem_id = rp.id
-         ORDER BY r.created_at DESC`
-      );
-      recommendations = rows || [];
-    } catch (err) {
-      console.warn('⚠️ Recommendations query warning:', err.message);
-      recommendations = [];
-    }
-
-    // Build report data
     const createdAt = new Date();
-    const generatedAt = createdAt.toLocaleString();
-    const uniqueStudents = new Set(submissions.map(s => s.student_email));
-    const uniqueConcepts = new Set(profiles.map(p => p.concept));
-    const uniqueLanguages = new Set(profiles.map(p => p.language));
-    const correctSubmissions = submissions.filter(s => s.is_correct).length;
-    const submissionSuccessRate = submissions.length > 0 ? ((correctSubmissions / submissions.length) * 100).toFixed(2) : '0.00';
-    const avgSuccessRate = profiles.length > 0
-      ? (profiles.reduce((sum, p) => sum + p.success_rate_percent, 0) / profiles.length).toFixed(2)
-      : '0.00';
-
-    let csvContent = 'Report Title, CodApt Research Data Export\n';
-    csvContent += `Report Generated By, CodApt Learning Analytics\n`;
-    csvContent += `Report Version, 1.0\n`;
-    csvContent += `Generated At, ${generatedAt}\n`;
-    csvContent += `Total Students, ${uniqueStudents.size}\n`;
-    csvContent += `Total Submissions, ${submissions.length}\n`;
-    csvContent += `Total Performance Profiles, ${profiles.length}\n`;
-    csvContent += `Total Recommendations, ${recommendations.length}\n`;
-    csvContent += `Unique Concepts, ${uniqueConcepts.size}\n`;
-    csvContent += `Unique Languages, ${uniqueLanguages.size}\n\n`;
-
-    csvContent += 'SUBMISSIONS DATA\n';
-    csvContent += 'Student Name,Email,Problem Title,Language,Concept,Difficulty,Tier,Attempts,Time Spent (sec),Correct,Syntax Errors,Structural Errors,Hint Used,Submission Time\n';
-    if (submissions.length === 0) {
-      csvContent += 'No data available,,,,,,,,,,,,\n';
-    } else {
-      submissions.forEach(row => {
-        const correctStr = row.is_correct ? 'Yes' : 'No';
-        const hintStr = row.hint_used ? 'Yes' : 'No';
-        csvContent += `"${row.student_name}","${row.student_email}","${row.problem_title}","${row.language}","${row.concept}","${row.difficulty}","${row.problem_tier}",${row.attempts},${row.time_spent},${correctStr},${row.syntax_errors},${row.structural_errors},${hintStr},"${row.submission_time}"\n`;
-      });
-    }
-
-    csvContent += '\nSTUDENT PERFORMANCE PROFILES\n';
-    csvContent += 'Student Name,Email,Language,Concept,Total Attempts,Tasks Completed,Total Tasks,Success Rate (%),Avg Time (sec),Avg Attempts,Performance Level,Syntax Errors,Structural Errors\n';
-    if (profiles.length === 0) {
-      csvContent += 'No data available,,,,,,,,,,,,\n';
-    } else {
-      profiles.forEach(row => {
-        csvContent += `"${row.student_name}","${row.student_email}","${row.language}","${row.concept}",${row.total_attempts},${row.tasks_completed},${row.total_tasks},${row.success_rate_percent},${row.avg_time_spent_sec},${row.avg_attempts},"${row.performance_level}",${row.syntax_errors},${row.structural_errors}\n`;
-      });
-    }
-
-    csvContent += '\nRECOMMENDATIONS & EFFECTIVENESS\n';
-    csvContent += 'Student Name,Source Problem,Source Difficulty,Source Concept,Recommended Problem,Recommended Difficulty,Recommended Concept,Similarity Score,Explanation,Recommendation Time\n';
-    if (recommendations.length === 0) {
-      csvContent += 'No data available,,,,,,,,,,,\n';
-    } else {
-      recommendations.forEach(row => {
-        const safeExplanation = (row.explanation || '').replace(/"/g, '""');
-        csvContent += `"${row.student_name}","${row.source_problem}","${row.source_difficulty}","${row.source_concept}","${row.recommended_problem}","${row.recommended_difficulty}","${row.recommended_concept}",${row.similarity_score},"${safeExplanation}","${row.recommendation_time}"\n`;
-      });
-    }
-
-    csvContent += '\nSUMMARY STATISTICS\n';
-    csvContent += `Metric,Value\n`;
-    csvContent += `Correct Submissions,${correctSubmissions}\n`;
-    csvContent += `Submission Success Rate (%),${submissionSuccessRate}\n`;
-    csvContent += `Average Student Success Rate (%),${avgSuccessRate}\n`;
-    csvContent += `Unique Concepts,${uniqueConcepts.size}\n`;
-    csvContent += `Unique Languages,${uniqueLanguages.size}\n`;
-    csvContent += `Report Notes,This export includes raw submissions, student profiles, recommendation results, and summary metrics for research reporting.\n`;
-    csvContent += `Generated By,CodApt Thesis Export Module\n`;
-    csvContent += `Export Format,CSV\n`;
-
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Research_Report_${createdAt.getFullYear()}${(createdAt.getMonth() + 1).toString().padStart(2, '0')}${createdAt.getDate().toString().padStart(2, '0')}_${createdAt.getHours().toString().padStart(2, '0')}${createdAt.getMinutes().toString().padStart(2, '0')}${createdAt.getSeconds().toString().padStart(2, '0')}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="CodApt_Training_Data_${createdAt.toISOString().slice(0, 10)}.csv"`);
     res.send(csvContent);
   } catch (err) {
-    console.error('❌ DOWNLOAD RESEARCH DATA:', err.message);
-    res.status(500).json({ error: err.message });
+    console.error('❌ DOWNLOAD TRAINING DATA:', err.message);
+    res.status(500).json({ error: 'Could not generate training data CSV.' });
   }
 });
 

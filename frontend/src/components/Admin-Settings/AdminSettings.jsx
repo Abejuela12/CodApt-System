@@ -92,12 +92,12 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `CodApt_Research_Data_${new Date().getTime()}.csv`;
+      link.download = `CodApt_Training_Data_${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      alert('✅ Research data exported successfully!\n\nIncludes:\n- All student submissions\n- Performance profiles\n- Recommendation effectiveness\n- Summary statistics');
+      alert('User training data exported successfully. The CSV contains saved user performance profiles in the train_data column format.');
     } catch (err) {
       console.error('Error exporting CSV:', err);
       alert(`Failed to export data: ${err.message}`);
@@ -265,7 +265,7 @@ const AdminSettings = ({ userData = {}, onLogout }) => {
           <div className={styles.actionButton} onClick={handleExportCSV} style={{ cursor: isLoading ? 'not-allowed' : 'pointer', opacity: isLoading ? 0.6 : 1 }}>
             <div className={styles.btnContent}>
               <FaFloppyDisk className={styles.actionIcon} />
-              <span>{isLoading ? 'Exporting...' : 'Export Data (CSV)'}</span>
+              <span>{isLoading ? 'Exporting...' : 'Download User Training CSV'}</span>
             </div>
             <FaChevronRight className={styles.chevron} />
           </div>

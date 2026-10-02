@@ -10,7 +10,15 @@
     "test:cosine": "node utils/testCosineSimilarity.js",
     "test:catalog": "node utils/problemCatalog.test.js",
     "test:all": "node cfgValidator.test.js && node utils/testCosineSimilarity.js && node utils/problemCatalog.test.js",
-    "test:cart": "node utils/testCart.js"
+    "test:cart": "node utils/testCart.js",
+    "seed:demo-progress": "node utils/seedDemoProgress.js",
+    "verify:seeded-progress": "node utils/verifySeededProgress.js",
+    "inspect:seeded-accounts": "node utils/inspectSeededAccounts.js",
+    "count:eligible-progress-accounts": "node utils/countEligibleProgressAccounts.js",
+    "move:progress-to-synthetic-demo": "node utils/moveProgressToSyntheticDemoAccounts.js",
+    "distribute:train-data-to-36-demo": "node utils/distributeTrainDataAcross36DemoAccounts.js",
+    "remove:synthetic-demo-accounts": "node utils/removeSyntheticDemoAccounts.js",
+    "verify:synthetic-demo-removal": "node utils/verifySyntheticDemoRemoval.js"
   },
   "keywords": [],
   "author": "",
