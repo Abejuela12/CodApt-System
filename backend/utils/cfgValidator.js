@@ -247,6 +247,46 @@ function validateJavaVariables(code, instruction) {
   };
 }
 
+function parsePythonRequiredAssignments(instruction) {
+  const assignments = [];
+  const literalPattern = '(True|False|true|false|-?\\d+(?:\\.\\d+)?|"(?:\\\\.|[^"\\\\])*"|\\\'(?:\\\\.|[^\\\'\\\\])*\\\')';
+  const declaredPattern = new RegExp(
+    `\\bvariable\\s+called\\s+(\\w+)\\s+(?:with\\s+(?:the\\s+)?value\\s+${literalPattern}|and\\s+set\\s+it\\s+to\\s+${literalPattern})`,
+    'gi'
+  );
+  let match;
+
+  while ((match = declaredPattern.exec(instruction)) !== null) {
+    const value = match[2] || match[3];
+    assignments.push({
+      name: match[1],
+      expression: /^true$/i.test(value) ? 'True' : /^false$/i.test(value) ? 'False' : value
+    });
+  }
+
+  const resultPattern = /\bresult\s+of\s+(.+?)\s+in\s+(?:a\s+)?variable\s+called\s+(\w+)/gi;
+  while ((match = resultPattern.exec(instruction)) !== null) {
+    assignments.push({ name: match[2], expression: match[1].trim() });
+  }
+
+  return [...new Map(assignments.map(assignment => [assignment.name, assignment])).values()];
+}
+
+function validatePythonRequiredAssignments(code, instruction) {
+  const requiredAssignments = parsePythonRequiredAssignments(instruction);
+  if (requiredAssignments.length === 0) return true;
+
+  const source = stripComments(code, 'python');
+  return requiredAssignments.every(({ name, expression }) => {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const assignmentPattern = new RegExp(`^\\s*${escapedName}\\s*=\\s*(.*?)\\s*$`);
+    return source.split('\n').some(line => {
+      const match = line.match(assignmentPattern);
+      return match && match[1].replace(/\s+/g, '') === expression.replace(/\s+/g, '');
+    });
+  });
+}
+
 // ─── hardcoding detection ────────────────────────────────────────
 
 function isHardcoded(code, language, expectedOutput) {
@@ -439,6 +479,15 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
       structuralErrors++;
       javaVariablesResult.feedback.forEach(msg => feedback.push(msg));
     }
+  }
+
+  if ((language || '').toLowerCase() === 'python' &&
+      !validatePythonRequiredAssignments(code, context.instruction || '')) {
+    constructUsed = false;
+    structuralErrors++;
+    feedback.push(
+      '⚠ This task requires assigning the instructed values and results to their named variables.'
+    );
   }
 
   // 2. Hardcoding check

@@ -211,6 +211,64 @@ const unsupportedJavaVariables = validateCFG(
 assert.strictEqual(unsupportedJavaVariables.constructUsed, false, 'Unsupported Java Variables instructions must fail closed');
 console.log('PASS: Unsupported Java Variables instruction fails closed');
 
+const isOnlineInstruction = 'Create a boolean variable called isOnline and set it to true. Use an if statement to print "Online".';
+const isOnlineDirectPrint = validateCFG(
+  'print(True)',
+  'Python',
+  'if',
+  'Online',
+  { concept: 'Conditionals', instruction: isOnlineInstruction }
+);
+assert.strictEqual(
+  isOnlineDirectPrint.constructUsed,
+  false,
+  'Python isOnline task must reject direct output without assigning the required variable'
+);
+console.log('PASS: Python isOnline task rejects direct output without its variable');
+
+const isOnlineVariable = validateCFG(
+  'isOnline = True\nif isOnline:\n    print("Online")',
+  'Python',
+  'if',
+  'Online',
+  { concept: 'Conditionals', instruction: isOnlineInstruction }
+);
+assert.strictEqual(
+  isOnlineVariable.constructUsed,
+  true,
+  'Python isOnline task accepts assignment and use of the required variable'
+);
+console.log('PASS: Python isOnline task accepts the required variable');
+
+const requiredPythonDataTypesInstruction = 'Declare a variable called speed with the value 85. Store the result of speed > 60 in a variable called is_speeding and the result of speed == 100 in a variable called is_max. Print is_speeding on the first line, is_max on the second line, and the type of is_speeding on the third line.';
+const pythonDataTypesPrintOnly = validateCFG(
+  "print(\"True\")\nprint(\"False\")\nprint(\"<class 'bool'>\")",
+  'Python',
+  null,
+  "True\nFalse\n<class 'bool'>",
+  { concept: 'Data Types', instruction: requiredPythonDataTypesInstruction }
+);
+assert.strictEqual(
+  pythonDataTypesPrintOnly.constructUsed,
+  false,
+  'Python Data Types task must reject matching output without the instructed variables'
+);
+console.log('PASS: Python Data Types task rejects matching output without variables');
+
+const pythonDataTypesAssignments = validateCFG(
+  'speed = 85\nis_speeding = speed > 60\nis_max = speed == 100\nprint(is_speeding)\nprint(is_max)\nprint(type(is_speeding))',
+  'Python',
+  null,
+  "True\nFalse\n<class 'bool'>",
+  { concept: 'Data Types', instruction: requiredPythonDataTypesInstruction }
+);
+assert.strictEqual(
+  pythonDataTypesAssignments.constructUsed,
+  true,
+  'Python Data Types task accepts the instructed variable assignments'
+);
+console.log('PASS: Python Data Types task accepts instructed variable assignments');
+
 const javaVariablesPatternCases = [
   {
     name: 'Java Variables String declaration',
