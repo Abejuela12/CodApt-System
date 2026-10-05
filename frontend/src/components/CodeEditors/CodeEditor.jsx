@@ -7,7 +7,7 @@ import './Split.css';
 import { calculateLanguageProgress, getLanguageLevel } from "../../utils/levelUtils";
 import { getHintLevel } from "../../utils/hintUtils";
 import { recommendNextTask } from "../../utils/recommendNextTask";
-import { normalizeOutput, normalizeTerminalOutput, extractEffectiveOutput, isOutputMatch } from "../../utils/outputMatching";
+import { normalizeOutput, normalizeTerminalOutput, extractEffectiveOutput, removePythonInputPrompts, isOutputMatch } from "../../utils/outputMatching";
 import { API_BASE_URL } from "../../config";
 
 // ── Mastery fanfare using Web Audio API (no external files needed) ──
@@ -317,9 +317,12 @@ const CodeEditor = ({
       }
 
       const expected  = normalizeOutput(task.expected_output || '');
-      const actualRaw = normalizeTerminalOutput(actualOutput);
+      const outputForChecking = language === 'Python' && concept?.toLowerCase() === 'input & output'
+        ? removePythonInputPrompts(actualOutput, code)
+        : actualOutput;
+      const actualRaw = normalizeTerminalOutput(outputForChecking);
       const actual    = extractEffectiveOutput(actualRaw, expected);
-      const isCorrect = isOutputMatch(actualOutput, task.expected_output || '');
+      const isCorrect = isOutputMatch(actual, task.expected_output || '');
 
       if (!userData?.id) {
         alert('Please log in before submitting answers so progress can be saved.');
@@ -333,7 +336,7 @@ const CodeEditor = ({
           userId: userData.id,
           problemId: task.id, language, concept, code,
           attempts: newAttempts, timeSpent: timeSpentSeconds,
-          isCorrect, hintUsed
+          isCorrect, output: actual, hintUsed
         })
       });
       const submitData = await submitRes.json().catch(() => null);

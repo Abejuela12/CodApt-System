@@ -23,6 +23,19 @@ export function extractEffectiveOutput(actual, expected) {
   return cleanActual;
 }
 
+export function removePythonInputPrompts(output, code) {
+  const promptPattern = /\binput\s*\(\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)')/g;
+  const prompts = [...(code || '').matchAll(promptPattern)]
+    .map(match => match[1] ?? match[2])
+    .filter(Boolean);
+
+  return prompts.reduce((cleanOutput, prompt) => {
+    const promptIndex = cleanOutput.indexOf(prompt);
+    if (promptIndex === -1) return cleanOutput;
+    return cleanOutput.slice(0, promptIndex) + cleanOutput.slice(promptIndex + prompt.length);
+  }, (output || '').replace(/\r/g, ''));
+}
+
 export function isOutputMatch(actual, expected) {
   const cleanActual = normalizeTerminalOutput(actual);
   const cleanExpected = normalizeOutput(expected);

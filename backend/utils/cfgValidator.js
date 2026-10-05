@@ -250,11 +250,23 @@ function validateJavaVariables(code, instruction) {
 function parsePythonRequiredAssignments(instruction) {
   const assignments = [];
   const literalPattern = '(True|False|true|false|-?\\d+(?:\\.\\d+)?|"(?:\\\\.|[^"\\\\])*"|\\\'(?:\\\\.|[^\\\'\\\\])*\\\')';
+  const directDeclarationPattern = new RegExp(
+    `\\b(?:declare|create)\\s+(?:a\\s+|an\\s+)?variable\\s+(\\w+)\\s*=\\s*${literalPattern}`,
+    'gi'
+  );
   const declaredPattern = new RegExp(
     `\\bvariable\\s+called\\s+(\\w+)\\s+(?:with\\s+(?:the\\s+)?value\\s+${literalPattern}|and\\s+set\\s+it\\s+to\\s+${literalPattern})`,
     'gi'
   );
   let match;
+
+  while ((match = directDeclarationPattern.exec(instruction)) !== null) {
+    const value = match[2];
+    assignments.push({
+      name: match[1],
+      expression: /^true$/i.test(value) ? 'True' : /^false$/i.test(value) ? 'False' : value
+    });
+  }
 
   while ((match = declaredPattern.exec(instruction)) !== null) {
     const value = match[2] || match[3];
@@ -272,6 +284,27 @@ function parsePythonRequiredAssignments(instruction) {
   return [...new Map(assignments.map(assignment => [assignment.name, assignment])).values()];
 }
 
+function parsePythonRequiredPrintExpressions(instruction) {
+  const printStart = instruction.match(/\bprint\s+/i);
+  if (!printStart) return [];
+
+  const printSection = instruction.slice(printStart.index + printStart[0].length);
+  const linePattern = /(.+?)\s+on\s+the\s+(?:first|second|third|\d+(?:st|nd|rd|th))\s+line/gi;
+  const expressions = [];
+  let match;
+
+  while ((match = linePattern.exec(printSection)) !== null) {
+    const expression = match[1]
+      .replace(/^[,\s]*(?:and\s+)?/i, '')
+      .trim()
+      .replace(/[.,;]$/, '')
+      .replace(/^the\s+type\s+of\s+(\w+)$/i, 'type($1)');
+    if (expression) expressions.push(expression);
+  }
+
+  return expressions;
+}
+
 function validatePythonRequiredAssignments(code, instruction) {
   const requiredAssignments = parsePythonRequiredAssignments(instruction);
   if (requiredAssignments.length === 0) return true;
@@ -285,6 +318,16 @@ function validatePythonRequiredAssignments(code, instruction) {
       return match && match[1].replace(/\s+/g, '') === expression.replace(/\s+/g, '');
     });
   });
+}
+
+function validatePythonRequiredPrintExpressions(code, instruction) {
+  const requiredExpressions = parsePythonRequiredPrintExpressions(instruction);
+  if (requiredExpressions.length === 0) return true;
+
+  const source = cleanCode(code, 'python').replace(/\s+/g, '');
+  return requiredExpressions.every(expression =>
+    source.includes(`print(${expression.replace(/\s+/g, '')})`)
+  );
 }
 
 // ─── hardcoding detection ────────────────────────────────────────
@@ -481,13 +524,19 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
     }
   }
 
-  if ((language || '').toLowerCase() === 'python' &&
-      !validatePythonRequiredAssignments(code, context.instruction || '')) {
-    constructUsed = false;
-    structuralErrors++;
-    feedback.push(
-      '⚠ This task requires assigning the instructed values and results to their named variables.'
-    );
+  if ((language || '').toLowerCase() === 'python') {
+    const instruction = context.instruction || '';
+    const assignmentsValid = validatePythonRequiredAssignments(code, instruction);
+    const printExpressionsValid = validatePythonRequiredPrintExpressions(code, instruction);
+    if (!assignmentsValid || !printExpressionsValid) {
+      constructUsed = false;
+      structuralErrors++;
+      feedback.push(
+        !assignmentsValid
+          ? '⚠ This task requires assigning the instructed values and results to their named variables.'
+          : '⚠ This task requires printing the expressions specified in the instructions.'
+      );
+    }
   }
 
   // 2. Hardcoding check

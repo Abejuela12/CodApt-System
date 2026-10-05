@@ -1,4 +1,4 @@
-let app;
+cd let app;
 let initError = null;
 
 try {

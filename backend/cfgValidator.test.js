@@ -269,6 +269,49 @@ assert.strictEqual(
 );
 console.log('PASS: Python Data Types task accepts instructed variable assignments');
 
+const pythonLogicalOperatorsInstruction = 'Declare a variable age = 20. Print age >= 18 and age <= 65 on the first line, age < 13 or age > 60 on the second line, and not age == 20 on the third line.';
+const pythonLogicalOperatorsPrintOnly = validateCFG(
+  'print("True")\nprint("False")\nprint("False")',
+  'Python',
+  null,
+  'True\nFalse\nFalse',
+  { concept: 'Operators', instruction: pythonLogicalOperatorsInstruction }
+);
+assert.strictEqual(
+  pythonLogicalOperatorsPrintOnly.constructUsed,
+  false,
+  'Python logical operators task must reject expected output printed as literals'
+);
+console.log('PASS: Python logical operators task rejects print-only answers');
+
+const pythonLogicalOperatorsWithoutExpressions = validateCFG(
+  'age = 20\nprint("True")\nprint("False")\nprint("False")',
+  'Python',
+  null,
+  'True\nFalse\nFalse',
+  { concept: 'Operators', instruction: pythonLogicalOperatorsInstruction }
+);
+assert.strictEqual(
+  pythonLogicalOperatorsWithoutExpressions.constructUsed,
+  false,
+  'Python logical operators task must reject the required variable with literal output'
+);
+console.log('PASS: Python logical operators task requires instructed print expressions');
+
+const pythonLogicalOperatorsSolution = validateCFG(
+  'age = 20\nprint(age >= 18 and age <= 65)\nprint(age < 13 or age > 60)\nprint(not age == 20)',
+  'Python',
+  null,
+  'True\nFalse\nFalse',
+  { concept: 'Operators', instruction: pythonLogicalOperatorsInstruction }
+);
+assert.strictEqual(
+  pythonLogicalOperatorsSolution.constructUsed,
+  true,
+  'Python logical operators task accepts the required variable and expressions'
+);
+console.log('PASS: Python logical operators task accepts instructed expressions');
+
 const javaVariablesPatternCases = [
   {
     name: 'Java Variables String declaration',
