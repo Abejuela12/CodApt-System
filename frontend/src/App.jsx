@@ -421,9 +421,25 @@ function App() {
           isDarkMode={isDarkMode}
           progress={progress}
           currentTaskIndex={currentTaskIndex}
-          onNextTask={(nextIndex, masteredConcept = null) => {
+          onNextTask={(nextIndex, masteredConcept = null, confirmedMastery = false) => {
             if (nextIndex === 'Complete!') {
               const conceptName = masteredConcept || selectedConcept;
+
+              if (confirmedMastery === true) {
+                setProgress(prev => {
+                  const next = {
+                    ...prev,
+                    [selectedLang]: {
+                      ...prev[selectedLang],
+                      [conceptName]: {
+                        ...prev[selectedLang]?.[conceptName],
+                        mastered: true,
+                      },
+                    },
+                  };
+                  return next;
+                });
+              }
 
               if (userData?.id) {
                 fetch(`${API_BASE_URL}/api/progress/${userData.id}`)
