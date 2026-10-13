@@ -172,6 +172,41 @@ const objectLiteralResult = validateCFG(
   'console.log',
   'Data loaded successfully'
 );
+const categorizedFeedbackResult = validateCFG(
+  'const value = 1',
+  'JavaScript',
+  'while',
+  'ok'
+);
+assert(
+  categorizedFeedbackResult.structuralFeedback.some(message => message.includes('while loop')) &&
+  categorizedFeedbackResult.syntaxFeedback.length > 0,
+  'Structural and syntax feedback should be returned in separate categories'
+);
+assert(
+  categorizedFeedbackResult.syntaxFeedback.every(message => !message.includes('while loop')) &&
+  categorizedFeedbackResult.structuralFeedback.every(message => !message.startsWith('⚠ Line ')),
+  'Feedback categories should not contain each other’s messages'
+);
+const simultaneousValidationResult = validateCFG(
+  'double celsius = 22.0;\ncelsius = 25.0;\nSystem.out.println(celsius)',
+  'Java',
+  null,
+  '77.0',
+  {
+    concept: 'Variables',
+    instruction: 'Declare a double variable called celsius with the value 25.0. Print celsius.'
+  }
+);
+assert(
+  simultaneousValidationResult.structuralErrors > 0 && simultaneousValidationResult.syntaxErrors > 0,
+  'Structural and syntax errors should both be reported for the same invalid submission'
+);
+assert(
+  simultaneousValidationResult.structuralFeedback.length > 0 &&
+  simultaneousValidationResult.syntaxFeedback.length > 0,
+  'A missing semicolon and an invalid variable initialization should both have categorized feedback'
+);
 
 const javaVariablesInstruction = 'Declare an int variable called age with the value 18. Then print it.';
 const javaVariablesCases = [
@@ -181,6 +216,7 @@ const javaVariablesCases = [
   { name: 'Java Variables wrong name', code: 'int other = 9;\nSystem.out.println(other + 9);', expected: false },
   { name: 'Java Variables wrong type', code: 'long age = 18;\nSystem.out.println(age);', expected: false },
   { name: 'Java Variables wrong initialization value', code: 'int age = 19;\nSystem.out.println(age);', expected: false },
+  { name: 'Java Variables reassigned after the required initialization', code: 'int age = 18;\nage = 18;\nSystem.out.println(age);', expected: false },
   { name: 'Java Variables formatting variation', code: 'int   age=18;\nSystem.out.println(age);', expected: true },
   { name: 'Java Variables valid extra calculation', code: 'int age = 18;\nint doubled = age * 2;\nSystem.out.println(age);', expected: true },
 ];
@@ -201,6 +237,88 @@ javaVariablesCases.forEach(test => {
   }
 });
 
+const javaArithmeticInstruction = 'Declare int variables a = 20 and b = 8. Print the result of a + b on the first line and a - b on the second line.';
+const javaArithmeticCases = [
+  {
+    name: 'reject Java arithmetic that hardcodes the declared values',
+    code: 'int a = 20;\nint b = 8;\nSystem.out.println(20 + 8);\nSystem.out.println(20 - 8);',
+    expected: false
+  },
+  {
+    name: 'accept Java arithmetic that uses the declared variables',
+    code: 'int a = 20;\nint b = 8;\nSystem.out.println(a + b);\nSystem.out.println(a - b);',
+    expected: true
+  },
+];
+
+javaArithmeticCases.forEach(test => {
+  const result = validateCFG(test.code, 'Java', null, '28\n12', {
+    concept: 'Operators',
+    instruction: javaArithmeticInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const booleanPrintInstruction = 'Declare a boolean variable called isStudent with the value true. Then print it.';
+const booleanPrintCases = [
+  {
+    name: 'reject Java hardcoded boolean output when instruction says print the variable',
+    code: 'boolean isStudent = true;\nSystem.out.println("true");',
+    expected: false
+  },
+  {
+    name: 'accept Java output that prints the declared boolean variable',
+    code: 'boolean isStudent = true;\nSystem.out.println(isStudent);',
+    expected: true
+  },
+  {
+    name: 'reject Python hardcoded boolean output when instruction says print the variable',
+    code: 'isStudent = True\nprint("true")',
+    expected: false
+  },
+  {
+    name: 'accept Python output that prints the declared boolean variable',
+    code: 'isStudent = True\nprint(isStudent)',
+    expected: true
+  },
+  {
+    name: 'reject Python variable first assigned a wrong value and then overwritten',
+    code: 'name = "yow"\nname = "John"\nprint(name)',
+    instruction: 'Declare a variable called name with the value "John". Then print it.',
+    expected: false
+  },
+  {
+    name: 'accept Python variable initialized to the required value and printed',
+    code: 'name = "John"\nprint(name)',
+    instruction: 'Declare a variable called name with the value "John". Then print it.',
+    expected: true
+  },
+];
+
+booleanPrintCases.forEach(test => {
+  const result = validateCFG(test.code, test.name.includes('Python') ? 'Python' : 'Java', null, 'true', {
+    concept: 'Data Types',
+    instruction: test.instruction || booleanPrintInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
 const unsupportedJavaVariables = validateCFG(
   'System.out.println(18);',
   'Java',
@@ -210,6 +328,226 @@ const unsupportedJavaVariables = validateCFG(
 );
 assert.strictEqual(unsupportedJavaVariables.constructUsed, false, 'Unsupported Java Variables instructions must fail closed');
 console.log('PASS: Unsupported Java Variables instruction fails closed');
+
+const javaScriptVariableInstruction = 'Declare a variable called name using let with the value "Alice". Print it using console.log().';
+const javaScriptVariableCases = [
+  {
+    name: 'JavaScript Variables rejects overwriting the instructed initial value',
+    code: 'let name = "Joy";\nname = "Alice";\nconsole.log(name);',
+    expected: false
+  },
+  {
+    name: 'JavaScript Variables accepts the instructed declaration',
+    code: 'let name = "Alice";\nconsole.log(name);',
+    expected: true
+  },
+  {
+    name: 'JavaScript Variables rejects a different declaration name',
+    code: 'let username = "Alice";\nconsole.log(username);',
+    expected: false
+  }
+];
+
+javaScriptVariableCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', null, 'Alice', {
+    concept: 'Variables',
+    instruction: javaScriptVariableInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const objectDestructuringInstruction = 'Use object destructuring to extract all three properties into variables. Print each on its own line.';
+const objectDestructuringCases = [
+  {
+    name: 'JavaScript destructuring rejects hardcoded values instead of extracted variables',
+    code: 'const car = { properties: "Toyota", model: "Vios", year: "2022" };\nconst { properties, model, year } = car;\nconsole.log("Toyota");\nconsole.log("Vios");\nconsole.log("2022");',
+    expected: false
+  },
+  {
+    name: 'JavaScript destructuring accepts printing each extracted variable',
+    code: 'const car = { properties: "Toyota", model: "Vios", year: "2022" };\nconst { properties, model, year } = car;\nconsole.log(properties);\nconsole.log(model);\nconsole.log(year);',
+    expected: true
+  }
+];
+
+objectDestructuringCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', null, 'Toyota\nVios\n2022', {
+    concept: 'Variables',
+    instruction: objectDestructuringInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const javaScriptTypeofInstruction = 'Declare a variable called score with the value 98.5 and a variable called message with the value "Well done". Print the typeof score on the first line and the typeof message on the second line.';
+const javaScriptTypeofCases = [
+  {
+    name: 'JavaScript Data Types rejects hardcoded typeof output',
+    code: 'let score = 98.5;\nlet message = "Well done";\nconsole.log("number");\nconsole.log("string");',
+    expected: false
+  },
+  {
+    name: 'JavaScript Data Types accepts typeof output from the instructed variables',
+    code: 'let score = 98.5;\nlet message = "Well done";\nconsole.log(typeof score);\nconsole.log(typeof message);',
+    expected: true
+  }
+];
+
+javaScriptTypeofCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', null, 'number\nstring', {
+    concept: 'Data Types',
+    instruction: javaScriptTypeofInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const javaScriptNaNInstruction = 'Declare a variable called parsed with the value Number("abc"). Print parsed on the first line, isNaN(parsed) on the second line, and the typeof parsed on the third line.';
+const javaScriptNaNCases = [
+  {
+    name: 'JavaScript NaN task rejects hardcoded expected output',
+    code: 'let parsed = Number("abc");\nconsole.log("NaN");\nconsole.log("true");\nconsole.log("number");',
+    expected: false
+  },
+  {
+    name: 'JavaScript NaN task accepts expressions using the declared variable',
+    code: 'let parsed = Number("abc");\nconsole.log(parsed);\nconsole.log(isNaN(parsed));\nconsole.log(typeof parsed);',
+    expected: true
+  },
+  {
+    name: 'JavaScript NaN task rejects printing a different expression',
+    code: 'let parsed = Number("abc");\nconsole.log(parsed);\nconsole.log(true);\nconsole.log(typeof parsed);',
+    expected: false
+  }
+];
+
+javaScriptNaNCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', null, 'NaN\ntrue\nnumber', {
+    concept: 'Data Types',
+    instruction: javaScriptNaNInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const javaScriptArithmeticInstruction = 'Declare variables x = 15 and y = 4. Print x + y on the first line, x * y on the second line, x % y on the third line, and x ** 2 on the fourth line.';
+const javaScriptArithmeticCases = [
+  {
+    name: 'JavaScript arithmetic task rejects expected output computed from hardcoded literals',
+    code: 'let x = 15, y = 4;\nconsole.log(15 + 4);\nconsole.log(15 * 4);\nconsole.log(15 % 4);\nconsole.log(15 ** 2);',
+    expected: false
+  },
+  {
+    name: 'JavaScript arithmetic task accepts expressions using the declared variables',
+    code: 'let x = 15, y = 4;\nconsole.log(x + y);\nconsole.log(x * y);\nconsole.log(x % y);\nconsole.log(x ** 2);',
+    expected: true
+  }
+];
+
+javaScriptArithmeticCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', null, '19\n60\n3\n225', {
+    concept: 'Operators',
+    instruction: javaScriptArithmeticInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const strictEqualityInstruction = 'Print the result of 0 == false on the first line, 0 === false on the second line, "1" == 1 on the third line, and "1" === 1 on the fourth line.';
+const strictEqualityCases = [
+  {
+    name: 'JavaScript equality task accepts the instructed comparison expressions without an unrequested declaration',
+    code: 'console.log(0 == false);\nconsole.log(0 === false);\nconsole.log("1" == 1);\nconsole.log("1" === 1);',
+    expected: true
+  },
+  {
+    name: 'JavaScript equality task rejects hardcoded expected output',
+    code: 'console.log("true");\nconsole.log("false");\nconsole.log("true");\nconsole.log("false");',
+    expected: false
+  }
+];
+
+strictEqualityCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', 'let', 'true\nfalse\ntrue\nfalse', {
+    concept: 'Operators',
+    instruction: strictEqualityInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+const javaScriptIncrementInstruction = 'Declare a variable called counter with the value 10. Print counter++ on the first line, then print counter on the second line, then print ++counter on the third line.';
+const javaScriptIncrementCases = [
+  {
+    name: 'JavaScript increment task accepts the instructed post- and pre-increment expressions',
+    code: 'let counter = 10;\nconsole.log(counter++);\nconsole.log(counter);\nconsole.log(++counter);',
+    expected: true
+  },
+  {
+    name: 'JavaScript increment task rejects hardcoded output instead of increment expressions',
+    code: 'let counter = 10;\nconsole.log(10);\nconsole.log(11);\nconsole.log(12);',
+    expected: false
+  }
+];
+
+javaScriptIncrementCases.forEach(test => {
+  const result = validateCFG(test.code, 'JavaScript', 'let', '10\n11\n12', {
+    concept: 'Operators',
+    instruction: javaScriptIncrementInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
 
 const isOnlineInstruction = 'Create a boolean variable called isOnline and set it to true. Use an if statement to print "Online".';
 const isOnlineDirectPrint = validateCFG(
@@ -239,6 +577,97 @@ assert.strictEqual(
   'Python isOnline task accepts assignment and use of the required variable'
 );
 console.log('PASS: Python isOnline task accepts the required variable');
+
+const ageIfElseInstruction = 'Declare an integer variable called age with the value 18. Use if-else to print "adult" when age is greater than or equal to 18.';
+const ageIfElseCases = [
+  {
+    name: 'reject Python conditional that uses a literal instead of the declared variable',
+    language: 'Python',
+    code: 'age = 18\nif 18 >= 18:\n    print("adult")\nelse:\n    print("not adult")',
+    requiredConstruct: 'if-else',
+    expected: false
+  },
+  {
+    name: 'reject Python hardcoded conditional even when required construct metadata is missing',
+    language: 'Python',
+    code: 'number = 7\nif 7 % 2 == 0:\n    print("Even")\nelse:\n    print("Odd")',
+    requiredConstruct: null,
+    instruction: 'Declare a variable called number with the value 7. Use if-else to print "Even" if the number is divisible by 2, otherwise print "Odd".',
+    expected: false
+  },
+  {
+    name: 'accept Python conditional that uses the declared variable',
+    language: 'Python',
+    code: 'age = 18\nif age >= 18:\n    print("adult")\nelse:\n    print("not adult")',
+    requiredConstruct: 'if-else',
+    expected: true
+  },
+  {
+    name: 'reject JavaScript conditional that uses a literal instead of the declared variable',
+    language: 'JavaScript',
+    code: 'let age = 18;\nif (18 >= 18) { console.log("adult"); } else { console.log("not adult"); }',
+    requiredConstruct: 'if-else',
+    expected: false
+  },
+  {
+    name: 'accept JavaScript conditional that uses the declared variable',
+    language: 'JavaScript',
+    code: 'let age = 18;\nif (age >= 18) { console.log("adult"); } else { console.log("not adult"); }',
+    requiredConstruct: 'if-else',
+    expected: true
+  },
+];
+
+const compareNumbersInstruction = 'Declare variables x = 45 and y = 60. Use if-else to print "x is larger" if x is greater than y, otherwise print "y is larger".';
+const compareNumbersCases = [
+  {
+    name: 'reject Python condition with declared variables replaced by literals',
+    code: 'x = 45\ny = 60\nif 45 > 60:\n    print("x is larger")\nelse:\n    print("y is larger")',
+    expected: false
+  },
+  {
+    name: 'reject Python condition that uses only one of the declared variables',
+    code: 'x = 45\ny = 60\nif x > 60:\n    print("x is larger")\nelse:\n    print("y is larger")',
+    expected: false
+  },
+  {
+    name: 'accept Python condition that compares both declared variables',
+    code: 'x = 45\ny = 60\nif x > y:\n    print("x is larger")\nelse:\n    print("y is larger")',
+    expected: true
+  },
+];
+
+ageIfElseCases.forEach(test => {
+  const result = validateCFG(test.code, test.language, test.requiredConstruct, test.language === 'Python' ? 'Odd' : 'adult', {
+    concept: 'Conditionals',
+    instruction: test.instruction || ageIfElseInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
+
+compareNumbersCases.forEach(test => {
+  const result = validateCFG(test.code, 'Python', 'if-else', 'y is larger', {
+    concept: 'Conditionals',
+    instruction: compareNumbersInstruction
+  });
+  try {
+    assert.strictEqual(result.constructUsed, test.expected, test.name);
+    console.log(`PASS: ${test.name}`);
+  } catch (err) {
+    failed += 1;
+    console.error(`FAIL: ${test.name}`);
+    console.error(err.message);
+    console.error('Result:', result);
+  }
+});
 
 const requiredPythonDataTypesInstruction = 'Declare a variable called speed with the value 85. Store the result of speed > 60 in a variable called is_speeding and the result of speed == 100 in a variable called is_max. Print is_speeding on the first line, is_max on the second line, and the type of is_speeding on the third line.';
 const pythonDataTypesPrintOnly = validateCFG(

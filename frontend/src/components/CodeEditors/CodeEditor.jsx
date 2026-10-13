@@ -115,10 +115,61 @@ function buildRichExplanation(rec, assessmentData) {
   return parts.join(' ');
 }
 
+function formatElapsedTime(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getInstructionVariableNames(instruction) {
+  const names = new Set();
+  const patterns = [
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?(?:integer|int|double|float|string|str|boolean|bool|number|numeric)?\s*variable\s+(?:called|named)\s+([A-Za-z_]\w*)/gi,
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?(?:integer|int|double|float|string|str|boolean|bool|number|numeric)\s+variable\s+(?!called\b|named\b)([A-Za-z_]\w*)/gi,
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?variable\s+([A-Za-z_]\w*)\s*(?:=|\bwith\b|\band\b)/gi,
+    /\bvariable\s+(?:called|named)\s+([A-Za-z_]\w*)/gi,
+    /\banother\s+called\s+([A-Za-z_]\w*)/gi,
+    /\bstore\b[^.!?]*?\bin\s+(?:a\s+)?(?:variable\s+)?(?:called\s+)?([A-Za-z_]\w*)/gi,
+  ];
+
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(instruction)) !== null) {
+      names.add(match[1]);
+    }
+  });
+
+  const declarations = /\b(?:declare|create|initialize|set up)\s+(?:(?:one|two|three|four|five|\d+)\s+)?(?:(?:integer|int|double|float|string|str|boolean|bool|number|numeric)\s+)?variables?\s+([^.!?]+)/gi;
+  let declaration;
+  while ((declaration = declarations.exec(instruction)) !== null) {
+    for (const match of declaration[1].matchAll(/\b([A-Za-z_]\w*)\s*=/g)) {
+      names.add(match[1]);
+    }
+  }
+
+  for (const match of instruction.matchAll(/`([A-Za-z_]\w*)`/g)) {
+    names.add(match[1]);
+  }
+
+  return names;
+}
+
+function renderInstruction(instruction) {
+  const variableNames = getInstructionVariableNames(instruction);
+  if (variableNames.size === 0) return instruction;
+
+  return instruction.split(/([A-Za-z_$][\w$]*)/g).map((part, index) =>
+    variableNames.has(part)
+      ? <strong className="instruction-variable" key={`${part}-${index}`}>{part}</strong>
+      : part
+  );
+}
+
 const CodeEditor = ({
   language, concept, level,
   onBack, onProfileClick, onHomeClick, onLogout,
-  onCompleteTask, userData, currentTaskIndex, onNextTask
+  onCompleteTask, userData, progress = {}, currentTaskIndex, onNextTask,
+  initialTier = 'Beginner', onTierChange
 }) => {
   const [code, setCode]           = useState('');
   const [tasks, setTasks]         = useState([]);
@@ -130,30 +181,42 @@ const CodeEditor = ({
   const xtermRef = useRef(null);
   const terminalBufferRef = useRef('');
   const terminalSessionIdRef = useRef(null);
-  const [currentTier, setCurrentTier]     = useState('Beginner');
+  const [currentTier, setCurrentTier]     = useState(initialTier);
   const [isSubmitting, setIsSubmitting]   = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
+  const [showDifficultySupport, setShowDifficultySupport] = useState(false);
+  const [isLoadingEasierTask, setIsLoadingEasierTask] = useState(false);
+  const [easierTaskError, setEasierTaskError] = useState('');
+  const [supportTask, setSupportTask] = useState(null);
+  const [currentDifficulty, setCurrentDifficulty] = useState(level);
+  const [failedSubmissionCount, setFailedSubmissionCount] = useState(0);
   const [showMastery, setShowMastery]       = useState(false);
+  const [previousTaskReview, setPreviousTaskReview] = useState(null);
+  const [showPreviousTaskReview, setShowPreviousTaskReview] = useState(false);
   const [tasksLoading, setTasksLoading]     = useState(true);
   const [isMobileEditor, setIsMobileEditor] = useState(
     () => window.matchMedia('(max-width: 600px)').matches
   );
   const [attempts, setAttempts]   = useState(0);
-  const [startTime]               = useState(Date.now());
+  const startTimeRef = useRef(Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [timeSpent, setTimeSpent] = useState(0);
+  const supportSnapshotRef = useRef(null);
+  const wasSupportTaskRef = useRef(false);
+  const handledRecommendationTaskIdsRef = useRef(new Set());
   const [hintLevel, setHintLevel] = useState(0);
   const [hintUsed, setHintUsed]   = useState(false);
   const [showHint, setShowHint]   = useState(false);
   const [assessmentResult, setAssessmentResult] = useState({
     correct: false, attempts: 0, timeSpent: 0,
-    feedback: [], cfgFeedback: [],
+    feedback: [], cfgFeedback: [], structuralFeedback: [], syntaxFeedback: [],
     syntaxErrors: 0, structuralErrors: 0,
     score: 0, level: 'Easy', recommendation: '',
     cosineRecommendation: null, isMastered: false
   });
 
   const hintRef = useRef(null);
-  const task    = tasks.length > 0 ? tasks[currentTaskIndex] : null;
+  const task    = supportTask || (tasks.length > 0 ? tasks[currentTaskIndex] : null);
 
   const hintsObj = task?.hints || {};
   const hintText =
@@ -173,6 +236,106 @@ const CodeEditor = ({
     if (!correct) return 0;
     return Math.max(100 - (att - 1) * 10 - Math.floor(time / 30) * 5, 20);
   };
+
+  const getTaskIdentity = current =>
+    `${language}:${concept}:${current?.id ?? currentTaskIndex}`;
+
+  const handleTryEasierTask = async () => {
+    if (!task || isLoadingEasierTask) return;
+
+    setIsLoadingEasierTask(true);
+    setEasierTaskError('');
+    try {
+      if (!userData?.id) {
+        throw new Error('Log in to get a personalized task recommendation.');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/adaptive-task-recommendations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userData.id,
+          language,
+          concept,
+          sourceProblemId: task.id,
+          learnerState: {
+            currentTier: task.problem_tier || currentTier,
+            currentDifficulty: task.difficulty || currentDifficulty,
+            attempts,
+            elapsedSeconds: Math.floor((Date.now() - startTimeRef.current) / 1000),
+            successRate: progress?.[language]?.[concept]?.successRate ?? 0
+          }
+        })
+      });
+      const recommendationData = await response.json();
+      if (!response.ok) {
+        throw new Error(recommendationData?.error || `Could not get a task recommendation (HTTP ${response.status}).`);
+      }
+      if (
+        !recommendationData?.task ||
+        String(recommendationData.task.concept) !== String(concept) ||
+        String(recommendationData.task.language) !== String(language) ||
+        !Number.isInteger(recommendationData.taskIndex) ||
+        !(Number.isInteger(recommendationData.nextTaskIndex) || recommendationData.nextTaskIndex === 'Complete!')
+      ) {
+        throw new Error('The server returned an invalid task recommendation.');
+      }
+
+      supportSnapshotRef.current = {
+        code,
+        output,
+        elapsedSeconds: Math.floor((Date.now() - startTimeRef.current) / 1000),
+        attempts,
+        failedSubmissionCount,
+        timeSpent,
+        hintLevel,
+        hintUsed,
+        showHint
+      };
+      setSupportTask({
+        ...recommendationData.task,
+        _candidateTier: recommendationData.task.problem_tier,
+        _candidateDifficulty: recommendationData.task.difficulty,
+        _candidateTaskIndex: recommendationData.taskIndex,
+        _nextTaskIndex: recommendationData.nextTaskIndex
+      });
+      setShowDifficultySupport(false);
+      setShowAssessment(false);
+    } catch (error) {
+      console.error('Failed to get an adaptive task recommendation:', error);
+      setEasierTaskError(error.message || 'Could not get a task recommendation. Please try again.');
+    } finally {
+      setIsLoadingEasierTask(false);
+    }
+  };
+
+  const returnToOriginalTask = () => {
+    setSupportTask(null);
+    setShowAssessment(false);
+  };
+
+  useEffect(() => {
+    if (!task) return;
+
+    const intervalId = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [task]);
+
+  useEffect(() => {
+    if (!task || supportTask || showAssessment || failedSubmissionCount < 1) return;
+
+    const taskIdentity = getTaskIdentity(task);
+    if (handledRecommendationTaskIdsRef.current.has(taskIdentity)) return;
+
+    if (failedSubmissionCount >= 3 && elapsedSeconds >= 300) {
+      handledRecommendationTaskIdsRef.current.add(taskIdentity);
+      setEasierTaskError('');
+      setShowDifficultySupport(true);
+    }
+  }, [task, supportTask, showAssessment, failedSubmissionCount, elapsedSeconds]);
 
   const handleRun = async () => {
     if (isRunning) return;
@@ -260,7 +423,7 @@ const CodeEditor = ({
     if (!task || isSubmitting) return;
     setIsSubmitting(true);
     const newAttempts      = attempts + 1;
-    const timeSpentSeconds = Math.floor((Date.now() - startTime) / 1000);
+    const timeSpentSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     try {
       const currentOutput = output || '';
@@ -298,11 +461,48 @@ const CodeEditor = ({
       setOutput(actualOutput);
 
       if (runtimeError) {
+        if (!userData?.id) {
+          alert('Please log in before submitting answers so progress can be saved.');
+          setIsSubmitting(false);
+          return;
+        }
+
+        const validationRes = await fetch(`${API_BASE_URL}/api/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userData.id,
+            problemId: task.id,
+            language,
+            concept,
+            code,
+            attempts: newAttempts,
+            timeSpent: timeSpentSeconds,
+            isCorrect: false,
+            output: actualOutput,
+            hintUsed
+          })
+        });
+        const validationData = await validationRes.json().catch(() => null);
+        if (!validationRes.ok) {
+          const message = validationData?.error || validationData?.message || `HTTP ${validationRes.status}`;
+          throw new Error(message);
+        }
+
+        const cfgFeedback = validationData?.cfgFeedback || [];
+        const structuralFeedback = validationData?.structuralFeedback ||
+          cfgFeedback.filter(msg => !String(msg).startsWith('⚠ Line '));
+        const syntaxFeedback = validationData?.syntaxFeedback ||
+          cfgFeedback.filter(msg => String(msg).startsWith('⚠ Line '));
+        const syntaxErrors = Math.max(Number(validationData?.syntaxErrors) || 0, 1);
+        const structuralErrors = Number(validationData?.structuralErrors) || 0;
         const score = calculateScore(newAttempts, timeSpentSeconds, false);
         setAssessmentResult({
           correct: false, attempts: newAttempts, timeSpent: timeSpentSeconds,
-          feedback: [`⚠ Runtime error: ${actualOutput}`],
-          cfgFeedback: [], syntaxErrors: 1, structuralErrors: 0,
+          feedback: [],
+          cfgFeedback, structuralFeedback,
+          syntaxFeedback: [`⚠ Runtime error: ${actualOutput}`, ...syntaxFeedback],
+          syntaxErrors, structuralErrors,
           output: actualOutput, score, level: 'Easy',
           expected: task.expected_output || '',
           recommendation: recommendNextTask(newAttempts, timeSpentSeconds, false, currentTaskIndex) || 'Keep practising!',
@@ -311,6 +511,7 @@ const CodeEditor = ({
         });
         setAttempts(newAttempts);
         setTimeSpent(timeSpentSeconds);
+        setFailedSubmissionCount(count => count + 1);
         setShowAssessment(true);
         setIsSubmitting(false);
         return;
@@ -355,6 +556,8 @@ const CodeEditor = ({
         console.warn('Submit mismatch: local output match but server did not mark correct', { problemId: task?.id, userId: userData?.id });
       }
       const cfgFeedback          = submitData.cfgFeedback      || [];
+      const structuralFeedback   = submitData.structuralFeedback || cfgFeedback.filter(msg => !String(msg).startsWith('⚠ Line '));
+      const syntaxFeedback       = submitData.syntaxFeedback || cfgFeedback.filter(msg => String(msg).startsWith('⚠ Line '));
       const syntaxErrors         = submitData.syntaxErrors     ?? 0;
       const structuralErrors     = submitData.structuralErrors ?? 0;
       const backendLevel         = submitData.level            || 'Easy';
@@ -373,7 +576,6 @@ const CodeEditor = ({
       } else {
         feedback.push('✔ Output matches the expected result.');
       }
-      cfgFeedback.forEach(msg => feedback.push(msg));
 
       const rec = recommendNextTask(newAttempts, timeSpentSeconds, finalCorrect, currentTaskIndex);
 
@@ -383,28 +585,52 @@ const CodeEditor = ({
 
       const isLastTask    = currentTaskIndex >= tasks.length - 1;
       const nextTaskIndex = finalCorrect ? (isLastTask ? 'Complete!' : currentTaskIndex + 1) : currentTaskIndex;
+      const assessmentNextTaskIndex = supportTask
+        ? currentTaskIndex
+        : nextTaskIndex;
 
       setAssessmentResult({
         correct: finalCorrect, attempts: newAttempts, timeSpent: timeSpentSeconds,
-        feedback, cfgFeedback, syntaxErrors, structuralErrors,
+        feedback, cfgFeedback, structuralFeedback, syntaxFeedback, syntaxErrors, structuralErrors,
         output: actualOutput, score, level: backendLevel,
         expected: task.expected_output || '',
         recommendation: recommendationText,
         cosineRecommendation: enrichedRecommendation,
         isMastered,
-        nextTaskIndex,
+        nextTaskIndex: assessmentNextTaskIndex,
       });
 
       setAttempts(newAttempts);
       setTimeSpent(timeSpentSeconds);
+      if (!finalCorrect) {
+        setFailedSubmissionCount(count => count + 1);
+      }
       if (finalCorrect) {
-        setCurrentTier(nextTier);
-        onCompleteTask(language, concept, currentTaskIndex + 1);
+        setPreviousTaskReview({
+          taskId: String(task.id),
+          taskIndex: currentTaskIndex,
+          title: task.title,
+          instruction: task.instruction,
+          expectedOutput: task.expected_output,
+          submittedCode: code,
+          submittedOutput: actualOutput,
+        });
+        if (!supportTask) {
+          setCurrentTier(nextTier);
+          onTierChange?.(nextTier);
+          onCompleteTask(language, concept, currentTaskIndex + 1);
+        } else {
+          onCompleteTask(
+            language,
+            concept,
+            Math.max(currentTaskIndex, supportTask._candidateTaskIndex) + 1
+          );
+        }
       }
 
       // Show mastery celebration whenever the last task is solved correctly,
       // regardless of what the backend isMastered flag says (DB timing can lag).
-      if (finalCorrect && nextTaskIndex === 'Complete!') {
+      if (finalCorrect && !supportTask && nextTaskIndex === 'Complete!') {
         playMasterySound();
         setShowMastery(true);
       } else {
@@ -430,23 +656,70 @@ const CodeEditor = ({
   }, []);
 
   useEffect(() => {
+    let active = true;
     const fetchTasks = async () => {
       setTasksLoading(true);
       try {
-        const res  = await fetch(`${API_BASE_URL}/api/problems/${language}/${concept}/${level}?tier=${currentTier}`);
+        const res  = await fetch(`${API_BASE_URL}/api/problems/${language}/${concept}/${currentDifficulty}?tier=${currentTier}`);
         const data = await res.json();
-        setTasks(data);
+        if (active) setTasks(data);
       } catch (err) {
         console.log('❌ Failed to load DB tasks', err);
       } finally {
-        setTasksLoading(false);
+        if (active) setTasksLoading(false);
       }
     };
     fetchTasks();
-  }, [language, concept, level, currentTier]);
+
+    return () => {
+      active = false;
+    };
+  }, [language, concept, currentDifficulty, currentTier]);
 
   useEffect(() => {
     if (!task) return;
+    if (supportTask) {
+      wasSupportTaskRef.current = true;
+      setCode(getStarterCode(language, task));
+      setOutput('');
+      setTerminalSessionId(null);
+      terminalSessionIdRef.current = null;
+      setTerminalStatus('idle');
+      terminalBufferRef.current = '';
+      setAttempts(0);
+      setFailedSubmissionCount(0);
+      setTimeSpent(0);
+      startTimeRef.current = Date.now();
+      setElapsedSeconds(0);
+      setShowHint(false);
+      setHintLevel(0);
+      setHintUsed(false);
+      if (xtermRef.current) xtermRef.current.clear();
+      return;
+    }
+
+    if (wasSupportTaskRef.current && supportSnapshotRef.current) {
+      const snapshot = supportSnapshotRef.current;
+      wasSupportTaskRef.current = false;
+      supportSnapshotRef.current = null;
+      setCode(snapshot.code);
+      setOutput(snapshot.output);
+      setTerminalSessionId(null);
+      terminalSessionIdRef.current = null;
+      setTerminalStatus('idle');
+      terminalBufferRef.current = '';
+      setAttempts(snapshot.attempts);
+      setFailedSubmissionCount(snapshot.failedSubmissionCount);
+      setTimeSpent(snapshot.timeSpent);
+      startTimeRef.current = Date.now() - snapshot.elapsedSeconds * 1000;
+      setElapsedSeconds(snapshot.elapsedSeconds);
+      setShowHint(snapshot.showHint);
+      setHintLevel(snapshot.hintLevel);
+      setHintUsed(snapshot.hintUsed);
+      if (xtermRef.current) xtermRef.current.clear();
+      return;
+    }
+
     setCode(getStarterCode(language, task));
     setOutput('');
     setTerminalSessionId(null);
@@ -454,14 +727,17 @@ const CodeEditor = ({
     setTerminalStatus('idle');
     terminalBufferRef.current = '';
     setAttempts(0);
+    setFailedSubmissionCount(0);
     setTimeSpent(0);
+    startTimeRef.current = Date.now();
+    setElapsedSeconds(0);
     setShowHint(false);
     setHintLevel(0);
     setHintUsed(false);
     if (xtermRef.current) {
       xtermRef.current.clear();
     }
-  }, [currentTaskIndex, tasks, language]);
+  }, [currentTaskIndex, tasks, language, supportTask]);
 
   useEffect(() => {
     if (xtermRef.current || !terminalContainerRef.current) return;
@@ -516,6 +792,8 @@ const CodeEditor = ({
 
   const displayLevel = mapLevelLabel(assessmentResult.level);
   const levelColors  = getLevelColors(assessmentResult.level);
+  const canReviewSubmittedTask = assessmentResult.correct &&
+    previousTaskReview?.taskId === String(task?.id);
 
   const handleRetry = async () => {
     setShowAssessment(false);
@@ -531,6 +809,26 @@ const CodeEditor = ({
   };
 
   const handleContinue = () => {
+    if (supportTask) {
+      if (!assessmentResult.correct) return;
+      const completedSupportTask = supportTask;
+      const nextIndex = completedSupportTask._nextTaskIndex === 'Complete!'
+        ? 'Complete!'
+        : Math.max(
+            Number(completedSupportTask._nextTaskIndex),
+            currentTaskIndex + 1,
+            completedSupportTask._candidateTaskIndex + 1
+          );
+      supportSnapshotRef.current = null;
+      wasSupportTaskRef.current = false;
+      setSupportTask(null);
+      setShowAssessment(false);
+      setCurrentTier(completedSupportTask._candidateTier);
+      setCurrentDifficulty(completedSupportTask._candidateDifficulty);
+      onTierChange?.(completedSupportTask._candidateTier);
+      onNextTask?.(nextIndex, concept, assessmentResult.isMastered === true);
+      return;
+    }
     if (!assessmentResult.correct || typeof assessmentResult.nextTaskIndex !== 'number') return;
     setShowAssessment(false);
     onNextTask?.(assessmentResult.nextTaskIndex);
@@ -597,7 +895,7 @@ const CodeEditor = ({
                       )}
                       <div style={{ background:'linear-gradient(135deg,rgba(59,130,246,0.1) 0%,rgba(99,102,241,0.1) 100%)', border:'1px solid rgba(59,130,246,0.3)', borderRadius:'12px', padding:'24px', marginBottom:'24px' }}>
                         <h3 style={{ fontSize:'20px', fontWeight:'700', color:'#3b82f6', margin:'0 0 16px 0' }}>Instructions</h3>
-                        <div className="instructions-area" style={{ fontSize:'16px', color:'#f1f5f9', lineHeight:'1.7', whiteSpace:'pre-line' }}>{task?.instruction || '—'}</div>
+                        <div className="instructions-area" style={{ fontSize:'16px', color:'#f1f5f9', lineHeight:'1.7', whiteSpace:'pre-line' }}>{renderInstruction(task?.instruction || '—')}</div>
                       </div>
                       <div style={{ backgroundColor:'rgba(34,197,94,0.15)', border:'1px solid rgba(34,197,94,0.4)', borderRadius:'10px', padding:'20px' }}>
                         <div style={{ color:'#22c55e', fontWeight:'700', fontSize:'16px', marginBottom:'12px' }}>✅ Expected Output</div>
@@ -636,7 +934,32 @@ const CodeEditor = ({
             <Split style={{ display:'flex', flexDirection:'column', height:'100%' }} sizes={[65,35]} minSize={100} gutterSize={12} direction="vertical" gutterStyle={() => ({ backgroundColor:'#1e3a8a', cursor:'row-resize' })}>
               <div style={{ display:'flex', flexDirection:'column', position:'relative', minHeight:0, backgroundColor:'white' }}>
                 <div style={{ backgroundColor:'#1e3a8a', padding:'8px 16px', fontSize:'14px', fontWeight:'bold', color:'#dbeafe', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-                  <span>{concept}.{fileExt(language)}</span>
+                  <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
+                    <span>{concept}.{fileExt(language)}</span>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                    {supportTask && (
+                      <button
+                        onClick={returnToOriginalTask}
+                        style={{ padding:'4px 9px', borderRadius:'6px', backgroundColor:'#172554', border:'1px solid #60a5fa', color:'#dbeafe', fontSize:'11px', cursor:'pointer', whiteSpace:'nowrap' }}
+                      >
+                        Back to current task
+                      </button>
+                    )}
+                    <span
+                      role="timer"
+                      aria-label={`Time on task ${formatElapsedTime(elapsedSeconds)}`}
+                      style={{ padding:'4px 10px', borderRadius:'999px', backgroundColor:'#172554', border:'1px solid #3b82f6', color:'#bfdbfe', fontSize:'12px', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}
+                    >
+                      Time ⏱ {formatElapsedTime(elapsedSeconds)}
+                    </span>
+                    <span
+                      aria-label={`${attempts} attempts on this task`}
+                      style={{ padding:'4px 10px', borderRadius:'999px', backgroundColor:'#172554', border:'1px solid #3b82f6', color:'#bfdbfe', fontSize:'12px', fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' }}
+                    >
+                      Attempts {attempts}
+                    </span>
+                  </div>
                 </div>
                 <div style={{ flex:1, minHeight:0 }}>
                   <Editor
@@ -676,18 +999,60 @@ const CodeEditor = ({
 
       {/* Footer */}
       <footer style={{ backgroundColor:'#1e3a8a', padding:'8px 24px', display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid black', flexShrink:0 }}>
-        <button onClick={onBack} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+        <button onClick={() => onBack?.(currentTier)} onMouseEnter={btnHover} onMouseLeave={btnLeave}
           style={{ ...btnBase, padding:'4px 32px', backgroundColor:'#0d1117', color:'white', border:'1px solid #4b5563', fontWeight:'bold', fontSize:'14px' }}>
           Back
         </button>
       </footer>
+
+      {showDifficultySupport && !showAssessment && !supportTask && (
+        <div
+          role="presentation"
+          style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.68)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1100, padding:'16px' }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="difficulty-support-title"
+            style={{ width:'min(440px, 100%)', backgroundColor:'#0f172a', border:'1px solid #334155', borderRadius:'14px', color:'#e2e8f0', padding:'24px', boxShadow:'0 20px 50px rgba(0,0,0,0.55)' }}
+          >
+            <h2 id="difficulty-support-title" style={{ margin:'0 0 10px', fontSize:'20px', color:'#bfdbfe' }}>
+              Need a different task?
+            </h2>
+            <p style={{ margin:'0 0 18px', fontSize:'14px', lineHeight:'1.6', color:'#cbd5e1' }}>
+              It seems this task is taking some effort. We’ll recommend an unsolved task from {concept}—preferably an easier one, or another task at the same level if no easier option is available.
+            </p>
+            {easierTaskError && (
+              <p role="alert" style={{ margin:'0 0 16px', color:'#fca5a5', fontSize:'13px', lineHeight:'1.5' }}>
+                {easierTaskError}
+              </p>
+            )}
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', flexWrap:'wrap' }}>
+              <button
+                onClick={() => setShowDifficultySupport(false)}
+                disabled={isLoadingEasierTask}
+                style={{ padding:'9px 14px', borderRadius:'8px', border:'1px solid #475569', backgroundColor:'#1e293b', color:'#e2e8f0', fontWeight:'600', cursor:isLoadingEasierTask ? 'not-allowed' : 'pointer' }}
+              >
+                I’ll keep trying
+              </button>
+              <button
+                onClick={handleTryEasierTask}
+                disabled={isLoadingEasierTask}
+                style={{ padding:'9px 14px', borderRadius:'8px', border:'none', backgroundColor:isLoadingEasierTask ? '#64748b' : '#3b82f6', color:'white', fontWeight:'700', cursor:isLoadingEasierTask ? 'wait' : 'pointer' }}
+              >
+                {isLoadingEasierTask ? 'Finding a task…' : 'Try another task'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ── Assessment Modal ── */}
       {showAssessment && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', backgroundColor:'rgba(0,0,0,0.7)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1000 }}>
           <div style={{ width:'580px', backgroundColor:'#0f172a', borderRadius:'16px', border:'1px solid #334155', color:'white', overflow:'hidden', boxShadow:'0 25px 60px rgba(0,0,0,0.6)', maxHeight:'90vh', overflowY:'auto' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 20px', background:'linear-gradient(135deg,#1e3a8a,#3b82f6)', fontWeight:'700' }}>
-              <span>{concept} • {level}</span>
+              <span>{concept} • {currentDifficulty}</span>
               <span onClick={() => setShowAssessment(false)} style={{ cursor:'pointer', fontSize:'18px' }}>✕</span>
             </div>
 
@@ -700,15 +1065,29 @@ const CodeEditor = ({
                   {displayLevel}
                 </span>
               </div>
-              <div style={{ marginTop:'6px', fontSize:'12px', color:'#64748b' }}>Classified by performance indicators (attempts, time, error counts)</div>
               <div style={{ marginTop:'8px', fontSize:'13px', color:'#94a3b8' }}>Language: <span style={{ color:'#60a5fa', fontWeight:'600' }}>{language}</span></div>
 
               <div style={{ marginTop:'14px', padding:'14px', backgroundColor:'#020617', border:'1px solid #334155', borderRadius:'10px' }}>
                 <p style={{ fontSize:'13px', fontWeight:'700', color:'#60a5fa', marginBottom:'8px' }}>Feedback Analysis</p>
-                {assessmentResult.feedback?.length > 0
-                  ? assessmentResult.feedback.map((msg, i) => <p key={i} style={{ fontSize:'13px', color:'#e2e8f0', marginBottom:'4px' }}>• {msg}</p>)
-                  : <p style={{ fontSize:'13px', color:'#94a3b8' }}>No issues detected.</p>
-                }
+                {assessmentResult.feedback?.length > 0 && (
+                  <div style={{ marginBottom:'12px' }}>
+                    {assessmentResult.feedback.map((msg, i) => <p key={i} style={{ fontSize:'13px', color:'#e2e8f0', marginBottom:'4px' }}>• {msg}</p>)}
+                  </div>
+                )}
+                <div style={{ marginBottom:'12px' }}>
+                  <p style={{ fontSize:'12px', fontWeight:'700', color:'#f97316', marginBottom:'5px' }}>Structural Feedback</p>
+                  {assessmentResult.structuralFeedback?.length > 0
+                    ? assessmentResult.structuralFeedback.map((msg, i) => <p key={i} style={{ fontSize:'13px', color:'#e2e8f0', marginBottom:'4px' }}>• {msg}</p>)
+                    : <p style={{ fontSize:'12px', color:'#94a3b8', margin:0 }}>No structural issues detected.</p>
+                  }
+                </div>
+                <div>
+                  <p style={{ fontSize:'12px', fontWeight:'700', color:'#ef4444', marginBottom:'5px' }}>Syntax Feedback</p>
+                  {assessmentResult.syntaxFeedback?.length > 0
+                    ? assessmentResult.syntaxFeedback.map((msg, i) => <p key={i} style={{ fontSize:'13px', color:'#e2e8f0', marginBottom:'4px' }}>• {msg}</p>)
+                    : <p style={{ fontSize:'12px', color:'#94a3b8', margin:0 }}>No syntax issues detected.</p>
+                  }
+                </div>
               </div>
 
               <div style={{ marginTop:'10px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
@@ -764,12 +1143,22 @@ const CodeEditor = ({
               )}
             </div>
 
-            <div style={{ padding:'16px 20px 20px', textAlign:'center' }}>
+            <div style={{ padding:'16px 20px 20px', display:'flex', justifyContent:'center', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+              {canReviewSubmittedTask && (
+                <button
+                  onClick={() => setShowPreviousTaskReview(true)}
+                  style={{ padding:'10px 18px', backgroundColor:'#1e293b', border:'1px solid #475569', borderRadius:'8px', color:'#e2e8f0', fontWeight:'700', cursor:'pointer' }}
+                >
+                  Review Task
+                </button>
+              )}
               <button
                 onClick={assessmentResult.correct ? handleContinue : handleRetry}
                 style={{ padding:'10px 28px', background: assessmentResult.correct ? '#22c55e' : '#3b82f6', border:'none', borderRadius:'8px', color:'white', fontWeight:'700', cursor:'pointer' }}
               >
-                {assessmentResult.correct ? 'Next Task →' : '↩ Retry Task'}
+                {assessmentResult.correct
+                  ? supportTask ? 'Continue to next task' : 'Next Task →'
+                  : '↩ Retry Task'}
               </button>
             </div>
           </div>
@@ -865,6 +1254,61 @@ const CodeEditor = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showPreviousTaskReview && previousTaskReview && (
+        <div
+          role="presentation"
+          onClick={() => setShowPreviousTaskReview(false)}
+          style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.68)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:2100, padding:'12px' }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="previous-task-review-title"
+            onClick={event => event.stopPropagation()}
+            style={{ width:'min(820px, 94vw)', maxHeight:'88vh', overflowY:'auto', backgroundColor:'#0f172a', border:'1px solid #334155', borderRadius:'16px', color:'white', boxShadow:'0 25px 60px rgba(0,0,0,0.6)' }}
+          >
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px', background:'linear-gradient(135deg,#1e3a8a,#3b82f6)' }}>
+              <h2 id="previous-task-review-title" style={{ margin:0, fontSize:'18px' }}>
+                Review: {previousTaskReview.title || `Task ${previousTaskReview.taskIndex + 1}`}
+              </h2>
+              <button
+                onClick={() => setShowPreviousTaskReview(false)}
+                aria-label="Close task review"
+                style={{ border:0, background:'transparent', color:'white', fontSize:'22px', cursor:'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ padding:'20px', display:'grid', gap:'16px' }}>
+              <div>
+                <h3 style={{ margin:'0 0 8px', color:'#93c5fd', fontSize:'14px' }}>Instructions</h3>
+                <div style={{ color:'#e2e8f0', whiteSpace:'pre-line', lineHeight:1.6 }}>{previousTaskReview.instruction || '—'}</div>
+              </div>
+              <div>
+                <h3 style={{ margin:'0 0 8px', color:'#93c5fd', fontSize:'14px' }}>Your submitted code</h3>
+                <pre style={{ margin:0, padding:'14px', maxHeight:'280px', overflow:'auto', backgroundColor:'#020617', border:'1px solid #334155', borderRadius:'8px', color:'#e2e8f0', fontFamily:'monospace', whiteSpace:'pre-wrap' }}>{previousTaskReview.submittedCode || '—'}</pre>
+              </div>
+              <div>
+                <h3 style={{ margin:'0 0 8px', color:'#93c5fd', fontSize:'14px' }}>Expected output</h3>
+                <pre style={{ margin:0, padding:'12px', backgroundColor:'#052e16', border:'1px solid #166534', borderRadius:'8px', color:'#86efac', whiteSpace:'pre-wrap' }}>{previousTaskReview.expectedOutput || '—'}</pre>
+              </div>
+              <div>
+                <h3 style={{ margin:'0 0 8px', color:'#93c5fd', fontSize:'14px' }}>Output from your submission</h3>
+                <pre style={{ margin:0, padding:'12px', maxHeight:'140px', overflow:'auto', backgroundColor:'#020617', border:'1px solid #334155', borderRadius:'8px', color:'#cbd5e1', whiteSpace:'pre-wrap' }}>{previousTaskReview.submittedOutput || '—'}</pre>
+              </div>
+              <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                <button
+                  onClick={() => setShowPreviousTaskReview(false)}
+                  style={{ padding:'9px 18px', border:0, borderRadius:'8px', backgroundColor:'#2563eb', color:'white', fontWeight:'700', cursor:'pointer' }}
+                >
+                  Back to current task
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       )}
 

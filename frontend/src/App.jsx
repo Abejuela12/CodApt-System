@@ -23,6 +23,7 @@ const EMPTY_USER = {
 
 const getProgressStorageKey = (userId) => `codapt_progress_${userId || 'guest'}`;
 const getTaskIndexStorageKey = (userId) => `codapt_task_indices_${userId || 'guest'}`;
+const getTaskTierStorageKey = (userId) => `codapt_task_tiers_${userId || 'guest'}`;
 
 const readStoredProgress = (userId) => {
   if (!userId || typeof window === 'undefined') return {};
@@ -70,6 +71,29 @@ const saveStoredTaskIndices = (userId, taskIndices) => {
   }
 };
 
+const readStoredTaskTiers = (userId) => {
+  if (!userId || typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(getTaskTierStorageKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveStoredTaskTiers = (userId, taskTiers) => {
+  if (!userId || typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(getTaskTierStorageKey(userId), JSON.stringify(taskTiers || {}));
+  } catch {
+    // Ignore storage quota issues: the app should still continue working in-memory.
+  }
+};
+
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -92,6 +116,7 @@ function App() {
   // Tracks the last task index per concept so "Back" resumes where you left off
   // Shape: { [language]: { [concept]: taskIndex } }
   const [savedTaskIndices, setSavedTaskIndices] = useState(() => readStoredTaskIndices(EMPTY_USER.id));
+  const [savedTaskTiers, setSavedTaskTiers] = useState(() => readStoredTaskTiers(EMPTY_USER.id));
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
   const [userData, setUserData] = useState(EMPTY_USER);
@@ -125,6 +150,12 @@ function App() {
     }
   }, [savedTaskIndices, userData?.id]);
 
+  useEffect(() => {
+    if (userData?.id) {
+      saveStoredTaskTiers(userData.id, savedTaskTiers);
+    }
+  }, [savedTaskTiers, userData?.id]);
+
   const saveTaskIndex = (lang, concept, index) => {
     setSavedTaskIndices(prev => {
       const next = {
@@ -132,6 +163,17 @@ function App() {
         [lang]: { ...prev[lang], [concept]: index }
       };
       if (userData?.id) saveStoredTaskIndices(userData.id, next);
+      return next;
+    });
+  };
+
+  const saveTaskTier = (lang, concept, tier) => {
+    setSavedTaskTiers(prev => {
+      const next = {
+        ...prev,
+        [lang]: { ...prev[lang], [concept]: tier }
+      };
+      if (userData?.id) saveStoredTaskTiers(userData.id, next);
       return next;
     });
   };
@@ -192,6 +234,7 @@ function App() {
 
       saveStoredProgress(userData.id, progress);
       saveStoredTaskIndices(userData.id, finalTaskIndices);
+      saveStoredTaskTiers(userData.id, savedTaskTiers);
       setSavedTaskIndices(finalTaskIndices);
     }
 
@@ -205,6 +248,7 @@ function App() {
     setSelectedConcept(null);
     setCurrentTaskIndex(0);
     setSavedTaskIndices({});
+    setSavedTaskTiers({});
     goToLanding();
   };
 
@@ -299,6 +343,7 @@ function App() {
       }
       // Also restore task indices after loading progress
       setSavedTaskIndices(readStoredTaskIndices(userId));
+      setSavedTaskTiers(readStoredTaskTiers(userId));
       return true;
     } catch (err) {
       console.error('Failed to load progress:', err);
@@ -317,6 +362,7 @@ function App() {
   const handleSignUp = async (user) => {
     setUserData(user);
     setSavedTaskIndices(readStoredTaskIndices(user?.id));
+    setSavedTaskTiers(readStoredTaskTiers(user?.id));
     await fetchAndSetProgress(user?.id);
     goToLanguages();
   };
@@ -330,6 +376,7 @@ function App() {
 
     setUserData(loginData);
     setSavedTaskIndices(readStoredTaskIndices(loginData?.id));
+    setSavedTaskTiers(readStoredTaskTiers(loginData?.id));
     await fetchAndSetProgress(loginData?.id);
     goToLanguages();
   };
@@ -408,11 +455,14 @@ function App() {
           language={selectedLang}
           concept={selectedConcept}
           level={selectedLevel}
-          onBack={() => {
+          initialTier={savedTaskTiers?.[selectedLang]?.[selectedConcept] || 'Beginner'}
+          onBack={(tier) => {
             // Save current task index before going back so we can resume
             saveTaskIndex(selectedLang, selectedConcept, currentTaskIndex);
+            saveTaskTier(selectedLang, selectedConcept, tier || 'Beginner');
             setSelectedConcept(null);
           }}
+          onTierChange={(tier) => saveTaskTier(selectedLang, selectedConcept, tier)}
           onProfileClick={goToProfile}
           onHomeClick={goToLanguages}
           onLogout={handleLogout}
@@ -476,6 +526,10 @@ function App() {
               setSavedTaskIndices(prev => ({
                 ...prev,
                 [selectedLang]: { ...prev[selectedLang], [selectedConcept]: 0 }
+              }));
+              setSavedTaskTiers(prev => ({
+                ...prev,
+                [selectedLang]: { ...prev[selectedLang], [selectedConcept]: 'Beginner' }
               }));
               setCurrentTaskIndex(0);
               setSelectedConcept(null);

@@ -37,6 +37,7 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [showMasteredPopup, setShowMasteredPopup] = useState(false);
+  const [showLearningGuidelines, setShowLearningGuidelines] = useState(false);
   const [popupConcept, setPopupConcept] = useState(null);
   const swiperRef = useRef(null);
 
@@ -55,6 +56,12 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
   };
 
   const handleStart = () => {
+    if (selectedConcept && !isConceptMastered(progress, language, selectedConcept)) {
+      setShowLearningGuidelines(true);
+    }
+  };
+
+  const handleConfirmStart = () => {
     if (selectedConcept && !isConceptMastered(progress, language, selectedConcept)) {
       onSelect(selectedConcept);
     }
@@ -284,6 +291,78 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
           </div>
         )}
       </div>
+
+      {showLearningGuidelines && (
+        <div
+          className={styles.guidelinesOverlay}
+          role="presentation"
+          onClick={() => setShowLearningGuidelines(false)}
+        >
+          <section
+            className={styles.guidelinesDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="learning-guidelines-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <h2 id="learning-guidelines-title" className={styles.guidelinesTitle}>
+              Before You Start
+            </h2>
+            <p className={styles.guidelinesIntro}>
+              Here is how task scores and learner levels work while you practice.
+            </p>
+
+            <section className={styles.guidelinesSection} aria-labelledby="scoring-guidelines-title">
+              <h3 id="scoring-guidelines-title">Scoring System</h3>
+              <ul>
+                <li>A correct task starts at 100 points.</li>
+                <li>Each attempt after the first deducts 10 points.</li>
+                <li>Every 30 seconds spent on the task deducts 5 points.</li>
+                <li>A correct answer scores at least 20 points.</li>
+                <li>An incorrect answer scores 0 points.</li>
+              </ul>
+              <p className={styles.scoreFormula}>
+                Correct score: max(100 − 10 × extra attempts − 5 × floor(task time in seconds ÷ 30), 20)
+              </p>
+            </section>
+
+            <section className={styles.guidelinesSection} aria-labelledby="learner-levels-title">
+              <h3 id="learner-levels-title">How Learner Levels Are Classified</h3>
+              <p>
+                Your level is based on your results across exercises, including success rate,
+                average attempts and time, and syntax and structural errors. The ranges below
+                are general guidelines; the system considers these factors together.
+              </p>
+              <ul className={styles.levelGuidelines}>
+                <li>
+                  <strong>Beginner:</strong> generally below about 48% success. This usually
+                    means you are still learning this concept and may need more attempts or time.
+                </li>
+                <li>
+                  <strong>Intermediate:</strong> generally around 48%–79% success, showing
+                    growing understanding and more consistent results on this concept.
+                </li>
+                <li>
+                  <strong>Advanced:</strong> generally around 80% success or higher, with
+                    consistent correct answers, fewer attempts, and fewer code errors on this concept.
+                </li>
+              </ul>
+            </section>
+
+            <div className={styles.guidelinesActions}>
+              <button
+                className={styles.guidelinesBackBtn}
+                onClick={() => setShowLearningGuidelines(false)}
+              >
+                Back
+              </button>
+              <button className={styles.guidelinesStartBtn} onClick={handleConfirmStart}>
+                Got it, Start Learning
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ── Already Mastered Popup ── */}
       {showMasteredPopup && (

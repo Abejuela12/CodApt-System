@@ -235,16 +235,69 @@ function validateJavaVariables(code, instruction) {
     const pattern = new RegExp(`\\b${type}\\s+${name}\\s*=\\s*${escapedValue}\\s*;`);
     return !pattern.test(source);
   });
+  const reassigned = parsed.declarations.some(({ name }) => {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const assignmentPattern = new RegExp(`\\b${escapedName}\\s*(?:=(?!=)|\\+=|-=|\\*=|/=|%=)`, 'g');
+    const mutationSource = cleanCode(code, 'java');
+    return [...mutationSource.matchAll(assignmentPattern)].length !== 1;
+  });
   const derivedMissing = parsed.derivedNames.some(name =>
     !new RegExp(`\\b(?:String|int|double)\\s+${name}\\s*=`, 'i').test(source)
   );
 
   return {
-    valid: !declarationMissing && !derivedMissing,
-    feedback: !declarationMissing && !derivedMissing
+    valid: !declarationMissing && !reassigned && !derivedMissing,
+    feedback: reassigned
+      ? ['⚠ This task requires initializing each instructed variable once; do not assign another value to it before printing.']
+      : !declarationMissing && !derivedMissing
       ? []
       : ['⚠ This Java Variables task requires the declared variables and initial values from the instructions.']
   };
+}
+
+function parseJavaRequiredPrintExpressions(instruction) {
+  const expressions = [];
+  const linePattern = /\s+on\s+the\s+(?:first|second|third|\d+(?:st|nd|rd|th))\s+line/gi;
+  const firstPrint = /\bprint\s+(?:the\s+result\s+of\s+)?/gi.exec(instruction);
+  if (!firstPrint) return expressions;
+
+  let cursor = firstPrint.index + firstPrint[0].length;
+  let lineMatch = linePattern.exec(instruction);
+  while (lineMatch && lineMatch.index >= cursor) {
+    const expression = instruction.slice(cursor, lineMatch.index).trim().replace(/[.,;]$/, '');
+    if (expression) expressions.push(expression);
+
+    cursor = linePattern.lastIndex;
+    const nextExpression = /\band\s+(?:the\s+result\s+of\s+)?/gi;
+    nextExpression.lastIndex = cursor;
+    const nextMatch = nextExpression.exec(instruction);
+    if (!nextMatch) break;
+    cursor = nextExpression.lastIndex;
+    linePattern.lastIndex = cursor;
+    lineMatch = linePattern.exec(instruction);
+  }
+
+  return expressions;
+}
+
+function validateJavaRequiredPrintExpressions(code, instruction) {
+  const requiredExpressions = parseJavaRequiredPrintExpressions(instruction);
+  if (requiredExpressions.length === 0) return true;
+
+  const source = stripComments(code, 'java');
+  const printArguments = [...source.matchAll(/(?:System\.out\.println|System\.out\.print|print)\s*\(([^;\n]*)\)\s*;?/g)]
+    .map(match => match[1].replace(/\s+/g, ''));
+  let nextArgumentIndex = 0;
+
+  return requiredExpressions.every(expression => {
+    const normalizedExpression = expression.replace(/\s+/g, '');
+    const matchingIndex = printArguments.findIndex((argument, index) =>
+      index >= nextArgumentIndex && argument === normalizedExpression
+    );
+    if (matchingIndex === -1) return false;
+    nextArgumentIndex = matchingIndex + 1;
+    return true;
+  });
 }
 
 function parsePythonRequiredAssignments(instruction) {
@@ -313,11 +366,125 @@ function validatePythonRequiredAssignments(code, instruction) {
   return requiredAssignments.every(({ name, expression }) => {
     const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const assignmentPattern = new RegExp(`^\\s*${escapedName}\\s*=\\s*(.*?)\\s*$`);
-    return source.split('\n').some(line => {
-      const match = line.match(assignmentPattern);
-      return match && match[1].replace(/\s+/g, '') === expression.replace(/\s+/g, '');
-    });
+    const firstAssignment = source.split('\n')
+      .map(line => line.match(assignmentPattern))
+      .find(Boolean);
+    return firstAssignment &&
+      firstAssignment[1].replace(/\s+/g, '') === expression.replace(/\s+/g, '');
   });
+}
+
+function parseJavaScriptRequiredDeclarations(instruction) {
+  const declarations = [];
+  const valuePattern = '("(?:\\\\.|[^"\\\\])*"|\\\'(?:\\\\.|[^\\\'\\\\])*\\\'|[A-Za-z_$][\\w$]*\\s*\\([^;\\n]*?\\)|-?\\d+(?:\\.\\d+)?|true|false|null)';
+  const pattern = new RegExp(
+    `\\bvariable\\s+(?:called|named)\\s+([A-Za-z_$][\\w$]*)\\s+(?:using\\s+(let|const|var)\\s+)?with\\s+(?:the\\s+)?value\\s+(${valuePattern})(?=\\s*(?:and\\s+(?:a|another)\\s+variable\\b|[,.;]\\s*(?:print|then)\\b|$))`,
+    'gi'
+  );
+  let match;
+
+  while ((match = pattern.exec(instruction)) !== null) {
+    declarations.push({
+      name: match[1],
+      keyword: match[2],
+      expression: match[3]
+    });
+  }
+
+  return declarations;
+}
+
+function validateJavaScriptRequiredDeclarations(code, instruction) {
+  const declarations = parseJavaScriptRequiredDeclarations(instruction);
+  if (declarations.length === 0) return true;
+
+  const source = stripComments(code, 'javascript');
+  const mutationSource = cleanCode(code, 'javascript');
+
+  return declarations.every(({ name, keyword, expression }) => {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedValue = expression.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const declarationKeywordPattern = keyword
+      ? `\\b${keyword}`
+      : '\\b(?:let|const|var)';
+    const declarationPattern = new RegExp(
+      `${declarationKeywordPattern}\\s+${escapedName}\\s*=\\s*${escapedValue}(?=\\s*[;,\\n]|\\s*$)`
+    );
+    const assignmentPattern = new RegExp(
+      `(?:\\b(?:let|const|var)\\s+)?\\b${escapedName}\\s*(?:=(?!=)|\\+=|-=|\\*=|/=|%=)`,
+      'g'
+    );
+    return declarationPattern.test(source) &&
+      [...mutationSource.matchAll(assignmentPattern)].length === 1;
+  });
+}
+
+function validateJavaScriptRequiredPrintExpressions(code, instruction) {
+  const printStart = /\bprint\s+/i.exec(instruction);
+  if (!printStart) return true;
+
+  const ordinal = '(?:first|second|third|fourth|fifth|\\d+(?:st|nd|rd|th))';
+  const printPattern = new RegExp(
+    `(?:^|,\\s*(?:(?:and|then)\\s+)?|\\bthen\\s+|\\band\\s+)(?:print\\s+)?(?:the\\s+)?(.+?)\\s+on\\s+the\\s+${ordinal}\\s+line`,
+    'gi'
+  );
+  const printInstructions = instruction
+    .slice(printStart.index + printStart[0].length)
+    .replace(/^the\s+result\s+of\s+/i, '');
+  const requiredExpressions = [...printInstructions.matchAll(printPattern)]
+    .map(match => match[1]
+      .replace(/^the\s+result\s+of\s+/i, '')
+      .replace(/[.,;]$/, '')
+      .trim());
+  if (requiredExpressions.length === 0) return true;
+
+  const source = stripComments(code, 'javascript');
+  const printArguments = getJavaScriptConsoleLogArguments(source)
+    .map(expression => expression.replace(/\btypeof\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g, 'typeof $1'))
+    .map(expression => expression.replace(/\s+/g, ''));
+  const normalizedRequirements = requiredExpressions.map(expression => expression.replace(/\s+/g, ''));
+
+  return printArguments.length === normalizedRequirements.length &&
+    printArguments.every((expression, index) => expression === normalizedRequirements[index]);
+}
+
+function getJavaScriptConsoleLogArguments(source) {
+  const argumentsList = [];
+  const calls = /\bconsole\.log\s*\(/g;
+  let call;
+
+  while ((call = calls.exec(source)) !== null) {
+    const start = calls.lastIndex;
+    let depth = 1;
+    let quote = null;
+    let escaped = false;
+
+    for (let index = start; index < source.length; index++) {
+      const character = source[index];
+      if (quote) {
+        if (escaped) {
+          escaped = false;
+        } else if (character === '\\') {
+          escaped = true;
+        } else if (character === quote) {
+          quote = null;
+        }
+        continue;
+      }
+
+      if (character === '"' || character === "'" || character === '`') {
+        quote = character;
+      } else if (character === '(') {
+        depth++;
+      } else if (character === ')' && --depth === 0) {
+        argumentsList.push(source.slice(start, index).trim());
+        calls.lastIndex = index + 1;
+        break;
+      }
+    }
+  }
+
+  return argumentsList;
 }
 
 function validatePythonRequiredPrintExpressions(code, instruction) {
@@ -328,6 +495,93 @@ function validatePythonRequiredPrintExpressions(code, instruction) {
   return requiredExpressions.every(expression =>
     source.includes(`print(${expression.replace(/\s+/g, '')})`)
   );
+}
+
+function validateJavaScriptObjectDestructuring(code, instruction) {
+  if (!/\bobject destructuring\b/i.test(instruction) ||
+      !/\bextract\b[\s\S]*\binto variables\b/i.test(instruction)) {
+    return true;
+  }
+
+  const source = stripComments(code, 'javascript');
+  const declaration = /\b(?:const|let|var)\s*\{\s*([^{}]+)\s*\}\s*=\s*[A-Za-z_$][\w$]*/g;
+  const destructuring = [...source.matchAll(declaration)]
+    .map(match => match[1])
+    .find(Boolean);
+  if (!destructuring) return false;
+
+  const variableNames = destructuring.split(',').map(binding => {
+    const parts = binding.trim().split(/\s*:\s*/);
+    return parts[parts.length - 1].trim();
+  });
+  if (variableNames.length < 2 || variableNames.some(name => !/^[A-Za-z_$][\w$]*$/.test(name))) {
+    return false;
+  }
+
+  const printCalls = [...source.matchAll(/\bconsole\.log\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*;?/g)]
+    .map(match => match[1]);
+  return variableNames.every(name => printCalls.includes(name));
+}
+
+function parseInstructionVariableNames(instruction) {
+  const patterns = [
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?(?:integer|int|double|float|string|str|boolean|bool|number|numeric)?\s*variable\s+(?:called|named)\s+([A-Za-z_]\w*)/gi,
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?(?:integer|int|double|float|string|str|boolean|bool|number|numeric)\s+variable\s+(?!called\b|named\b)([A-Za-z_]\w*)/gi,
+    /\b(?:declare|create|initialize|set up)\s+(?:an?\s+)?variable\s+([A-Za-z_]\w*)\s*(?:=|\bwith\b|\band\b)/gi,
+    /\bvariable\s+(?:called|named)\s+([A-Za-z_]\w*)/gi,
+  ];
+  const names = new Set();
+
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(instruction)) !== null) {
+      names.add(match[1]);
+    }
+  });
+
+  const assignmentDeclarations = /\b(?:declare|create|initialize|set up)\s+(?:(?:one|two|three|four|five|\d+)\s+)?(?:(?:integer|int|double|float|string|str|boolean|bool|number|numeric)\s+)?variables?\s+([^.!?]+)/gi;
+  let declaration;
+  while ((declaration = assignmentDeclarations.exec(instruction)) !== null) {
+    for (const match of declaration[1].matchAll(/\b([A-Za-z_]\w*)\s*=/g)) {
+      names.add(match[1]);
+    }
+  }
+
+  return [...names];
+}
+
+function usesDeclaredVariableInIfCondition(code, language, instruction) {
+  const variableNames = parseInstructionVariableNames(instruction);
+  if (variableNames.length === 0) return true;
+
+  const source = cleanCode(code, language);
+  const lang = (language || '').toLowerCase();
+  const conditions = lang === 'python'
+    ? [...source.matchAll(/\bif\s+([^:\n]+)\s*:/g)].map(match => match[1])
+    : [...source.matchAll(/\bif\s*\(([^)]*)\)/g)].map(match => match[1]);
+
+  return conditions.some(condition =>
+    variableNames.every(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(condition))
+  );
+}
+
+function validatesPrintedDeclaredVariables(code, language, instruction) {
+  if (!/\bprint\s+(?:it|them|the\s+(?:variable|variables|value|values))\b/i.test(instruction)) {
+    return true;
+  }
+
+  const variableNames = parseInstructionVariableNames(instruction);
+  if (variableNames.length === 0) return true;
+
+  const source = cleanCode(code, language);
+  const printArguments = [...source.matchAll(/(?:\bprint|\.println|\.printf|\.log)\s*\(([^)]*)\)/g)]
+    .map(match => match[1]);
+
+  return variableNames.every(name => {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const variablePattern = new RegExp(`\\b${escapedName}\\b`);
+    return printArguments.some(argument => variablePattern.test(argument));
+  });
 }
 
 // ─── hardcoding detection ────────────────────────────────────────
@@ -454,7 +708,7 @@ function countSyntaxErrors(code, language) {
       // BUG FIX: skip lines that are only an opening or closing brace,
       // method signatures, or annotations — previously caused many false positives
       const isBlockStatement = /^(if|else|for|while|do|try|catch|finally|switch|class|function|interface|enum)\b/.test(line);
-      const isMethodSig      = /\)\s*\{?\s*$/.test(line) && /\(/.test(line);
+      const isMethodSig      = /^(?:(?:public|private|protected|static|final|abstract|synchronized)\s+)*(?:[\w<>\[\],.?]+\s+)+[\w$]+\s*\([^)]*\)\s*\{?$/.test(line);
       const isBraceOnly      = /^[{}]$/.test(line);
       const isPropertyLike   = isObjectPropertyLikeLine(line);
 
@@ -493,9 +747,16 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
   let   structuralErrors = 0;
 
   // 1. Required construct check
-  let constructUsed = isConstructUsed(code, language, requiredConstruct);
+  const normalizedLanguage = (language || '').toLowerCase();
+  const normalizedInstruction = context.instruction || '';
+  const instructionRequiresDeclarationKeyword =
+    normalizedLanguage !== 'javascript' ||
+    !['let', 'const', 'var'].includes((requiredConstruct || '').toLowerCase()) ||
+    new RegExp(`\\b${requiredConstruct}\\b`, 'i').test(normalizedInstruction);
+  const enforcedConstruct = instructionRequiresDeclarationKeyword ? requiredConstruct : null;
+  let constructUsed = isConstructUsed(code, language, enforcedConstruct);
 
-  if (requiredConstruct && !constructUsed) {
+  if (enforcedConstruct && !constructUsed) {
     structuralErrors++;
     const labels = {
       'for':      'a for loop',
@@ -508,7 +769,7 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
       'try':      'a try/catch block',
       'Scanner':  'a Scanner for user input'
     };
-    const label = labels[requiredConstruct] || `the \`${requiredConstruct}\` construct`;
+    const label = labels[enforcedConstruct] || `the \`${enforcedConstruct}\` construct`;
     feedback.push(
       `⚠ This task requires ${label}. ` +
       `Make sure you are actually using it, not just mentioning it in a comment or string.`
@@ -524,6 +785,15 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
     }
   }
 
+  if (
+    (language || '').toLowerCase() === 'java' &&
+    !validateJavaRequiredPrintExpressions(code, context.instruction || '')
+  ) {
+    constructUsed = false;
+    structuralErrors++;
+    feedback.push('⚠ This task requires printing the expressions specified in the instructions, using the instructed variables.');
+  }
+
   if ((language || '').toLowerCase() === 'python') {
     const instruction = context.instruction || '';
     const assignmentsValid = validatePythonRequiredAssignments(code, instruction);
@@ -537,6 +807,47 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
           : '⚠ This task requires printing the expressions specified in the instructions.'
       );
     }
+  }
+
+  if ((language || '').toLowerCase() === 'javascript') {
+    const instruction = context.instruction || '';
+    const declarationsValid = validateJavaScriptRequiredDeclarations(code, instruction);
+    const printExpressionsValid = validateJavaScriptRequiredPrintExpressions(code, instruction);
+    if (!declarationsValid || !printExpressionsValid) {
+      constructUsed = false;
+      structuralErrors++;
+      feedback.push(
+        !declarationsValid
+          ? '⚠ This task requires declaring the instructed JavaScript variable once with its required initial value.'
+          : '⚠ This task requires printing the instructed expressions using the declared variables.'
+      );
+    }
+  }
+
+  if (
+    (language || '').toLowerCase() === 'javascript' &&
+    !validateJavaScriptObjectDestructuring(code, context.instruction || '')
+  ) {
+    constructUsed = false;
+    structuralErrors++;
+    feedback.push('⚠ This task requires destructuring the object and printing each extracted variable, not hardcoded values.');
+  }
+
+  const instructionRequiresIf = /\b(?:use|include|write|add)\s+(?:an?\s+)?if(?:\s*-\s*else|\s+and\s+else)?\b/i
+    .test(context.instruction || '');
+  if (
+    (['if', 'if-else'].includes((requiredConstruct || '').toLowerCase()) || instructionRequiresIf) &&
+    !usesDeclaredVariableInIfCondition(code, language, context.instruction || '')
+  ) {
+    constructUsed = false;
+    structuralErrors++;
+    feedback.push('⚠ This task requires using the instructed variable in the if condition, not replacing it with a literal value.');
+  }
+
+  if (!validatesPrintedDeclaredVariables(code, language, context.instruction || '')) {
+    constructUsed = false;
+    structuralErrors++;
+    feedback.push('⚠ This task requires printing the instructed variable, not a hardcoded value.');
   }
 
   // 2. Hardcoding check
@@ -559,14 +870,25 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
   const { count: syntaxErrors, messages: syntaxMessages } =
     countSyntaxErrors(code, language);
 
-  syntaxMessages.forEach(msg => feedback.push(`⚠ Syntax: ${msg}`));
+  const syntaxFeedback = syntaxMessages.map(msg => `⚠ ${msg}`);
+  syntaxFeedback.forEach(msg => feedback.push(msg));
+  const structuralFeedback = feedback.filter(msg => !msg.startsWith('⚠ Line '));
 
   // 4. Positive feedback when everything is clean
   if (constructUsed && !hardcoded && syntaxErrors === 0) {
     feedback.push('✔ Code structure looks good.');
+    structuralFeedback.push('✔ Code structure looks good.');
   }
 
-  return { syntaxErrors, structuralErrors, feedback, constructUsed, hardcoded };
+  return {
+    syntaxErrors,
+    structuralErrors,
+    feedback,
+    structuralFeedback,
+    syntaxFeedback,
+    constructUsed,
+    hardcoded
+  };
 }
 
 module.exports = { validateCFG };

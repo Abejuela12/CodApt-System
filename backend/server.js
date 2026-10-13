@@ -13,6 +13,7 @@ const { isOutputMatch } = require('./utils/outputMatching');
 const { recommendExercise } = require('./utils/cosineSimilarity');
 const { CARTClassifier } = require('./utils/cartModel');
 const { getFallbackProblems, resolveProblemMetadata } = require('./utils/problemCatalog');
+const { selectAdaptiveTask } = require('./utils/adaptiveTaskRecommender');
 const { startInteractiveSession, writeToInteractiveSession, getInteractiveSessionOutput, removeInteractiveSession } = require('./utils/runCode');
 
 // ─── Load CART model at startup ───────────────────────────────────
@@ -42,6 +43,7 @@ try {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+let adaptiveRecommendationsReady = false;
 
 async function ensureArchivedColumn() {
   try {
@@ -55,8 +57,45 @@ async function ensureArchivedColumn() {
   }
 }
 
+async function ensureAdaptiveRecommendationsTable() {
+  if (adaptiveRecommendationsReady) return;
+
+  try {
+    await db.query(
+      `CREATE TABLE IF NOT EXISTS adaptive_task_recommendations (
+         id BIGSERIAL PRIMARY KEY,
+         user_id TEXT NOT NULL,
+         language TEXT NOT NULL,
+         concept TEXT NOT NULL,
+         source_problem_id TEXT NOT NULL,
+         recommended_problem_id TEXT NOT NULL,
+         context_key TEXT NOT NULL,
+         reward DOUBLE PRECISION,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+         resolved_at TIMESTAMPTZ
+       )`
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS adaptive_task_recommendations_context_idx
+       ON adaptive_task_recommendations (language, concept, context_key, recommended_problem_id)`
+    );
+    await db.query(
+      `CREATE INDEX IF NOT EXISTS adaptive_task_recommendations_user_idx
+       ON adaptive_task_recommendations (user_id, language, concept, recommended_problem_id)`
+    );
+    console.log('✅ ensured adaptive_task_recommendations table and indexes exist');
+    adaptiveRecommendationsReady = true;
+  } catch (err) {
+    console.error('❌ Failed to ensure adaptive recommendation storage:', err.message);
+    throw err;
+  }
+}
+
 if (require.main === module) {
   ensureArchivedColumn();
+  ensureAdaptiveRecommendationsTable().catch(err => {
+    console.error('❌ Adaptive recommendation storage is unavailable:', err.message);
+  });
 }
 
 /* ─────────────────────────────────────
@@ -399,6 +438,168 @@ app.get('/api/problems/:language/:concept/:difficulty', async (req, res) => {
   }
 });
 
+app.get('/api/completed-problems/:userId/:language/:concept', async (req, res) => {
+  try {
+    const { userId, language, concept } = req.params;
+    const { rows } = await db.query(
+      `SELECT DISTINCT problem_id
+       FROM submissions
+       WHERE user_id = $1
+         AND language = $2
+         AND concept = $3
+         AND is_correct = true`,
+      [userId, language, concept]
+    );
+
+    res.json(rows.map(row => String(row.problem_id)));
+  } catch (err) {
+    console.error('❌ GET COMPLETED PROBLEMS:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/adaptive-task-recommendations', async (req, res) => {
+  try {
+    await ensureAdaptiveRecommendationsTable();
+
+    const {
+      userId,
+      language,
+      concept,
+      sourceProblemId,
+      learnerState = {}
+    } = req.body || {};
+    if (!userId || !language || !concept || sourceProblemId === undefined || sourceProblemId === null) {
+      return res.status(400).json({ error: 'User, language, concept, and source task are required.' });
+    }
+
+    const { rows: sourceRows } = await db.query(
+      `SELECT * FROM problems
+       WHERE id::text = $1 AND language = $2 AND concept = $3
+         AND COALESCE(archived, FALSE) = FALSE`,
+      [String(sourceProblemId), language, concept]
+    );
+    const source = sourceRows[0] || resolveProblemMetadata(Number(sourceProblemId));
+    if (!source || source.language !== language || source.concept !== concept) {
+      return res.status(404).json({ error: 'The source task was not found in this concept.' });
+    }
+
+    const { rows: databaseTasks } = await db.query(
+      `SELECT * FROM problems
+       WHERE language = $1 AND concept = $2
+         AND COALESCE(archived, FALSE) = FALSE
+       ORDER BY id ASC`,
+      [language, concept]
+    );
+    const candidates = databaseTasks.length > 0
+      ? databaseTasks
+      : getFallbackProblems({ language, concept });
+
+    const [{ rows: attemptedRows }, { rows: recommendedRows }] = await Promise.all([
+      db.query(
+        `SELECT DISTINCT problem_id
+         FROM submissions
+         WHERE user_id = $1 AND language = $2 AND concept = $3`,
+        [userId, language, concept]
+      ),
+      db.query(
+        `SELECT DISTINCT recommended_problem_id
+         FROM adaptive_task_recommendations
+         WHERE user_id = $1 AND language = $2 AND concept = $3`,
+        [String(userId), language, concept]
+      )
+    ]);
+    const attemptedTaskIds = new Set(attemptedRows.map(row => String(row.problem_id)));
+    const recommendedTaskIds = new Set(recommendedRows.map(row => String(row.recommended_problem_id)));
+
+    const tierOrder = ['Beginner', 'Intermediate', 'Advanced'];
+    const difficultyOrder = ['Easy', 'Intermediate', 'Hard'];
+    const tier = learnerState.currentTier || source.problem_tier;
+    const difficulty = learnerState.currentDifficulty || source.difficulty;
+    const attempts = Math.max(0, Number(learnerState.attempts) || 0);
+    const elapsedSeconds = Math.max(0, Number(learnerState.elapsedSeconds) || 0);
+    let successRate = Number(learnerState.successRate);
+    if (!Number.isFinite(successRate)) successRate = 0;
+    if (successRate > 1) successRate /= 100;
+    successRate = Math.max(0, Math.min(1, successRate));
+
+    const contextKey = JSON.stringify({
+      tier: tierOrder.includes(tier) ? tier : source.problem_tier,
+      difficulty: difficultyOrder.includes(difficulty) ? difficulty : source.difficulty,
+      attempts: attempts >= 5 ? 'high' : 'low',
+      elapsed: elapsedSeconds >= 600 ? 'long' : 'medium',
+      success: successRate < 0.48 ? 'low' : successRate < 0.8 ? 'medium' : 'high'
+    });
+
+    await db.query(
+      `UPDATE adaptive_task_recommendations
+       SET reward = COALESCE(reward, 0) - 0.25, resolved_at = NOW()
+       WHERE user_id = $1 AND language = $2 AND concept = $3 AND resolved_at IS NULL`,
+      [String(userId), language, concept]
+    );
+
+    const { rows: rewardRows } = await db.query(
+      `SELECT recommended_problem_id, AVG(reward) AS mean_reward
+       FROM adaptive_task_recommendations
+       WHERE language = $1 AND concept = $2 AND context_key = $3 AND reward IS NOT NULL
+       GROUP BY recommended_problem_id`,
+      [language, concept, contextKey]
+    );
+    const meanRewards = new Map(rewardRows.map(row => [
+      String(row.recommended_problem_id),
+      Number(row.mean_reward)
+    ]));
+    const recommendedTask = selectAdaptiveTask({
+      source,
+      candidates,
+      attemptedTaskIds,
+      recommendedTaskIds,
+      meanRewards
+    });
+
+    if (!recommendedTask) {
+      return res.status(404).json({
+        error: 'There are no other predefined tasks available in this concept.'
+      });
+    }
+
+    const taskGroup = candidates.filter(candidate =>
+      candidate.problem_tier === recommendedTask.problem_tier &&
+      candidate.difficulty === recommendedTask.difficulty
+    );
+    const taskIndex = taskGroup.findIndex(candidate =>
+      String(candidate.id) === String(recommendedTask.id)
+    );
+    const availableNextIndexes = taskGroup.flatMap((candidate, index) =>
+      String(candidate.id) !== String(source.id) &&
+      String(candidate.id) !== String(recommendedTask.id) &&
+      !attemptedTaskIds.has(String(candidate.id)) &&
+      !recommendedTaskIds.has(String(candidate.id))
+        ? [index]
+        : []
+    );
+    const nextTaskIndex = availableNextIndexes.find(index => index > taskIndex) ??
+      availableNextIndexes[0] ??
+      -1;
+
+    await db.query(
+      `INSERT INTO adaptive_task_recommendations
+       (user_id, language, concept, source_problem_id, recommended_problem_id, context_key)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [String(userId), language, concept, String(source.id), String(recommendedTask.id), contextKey]
+    );
+
+    res.json({
+      task: recommendedTask,
+      taskIndex,
+      nextTaskIndex: nextTaskIndex >= 0 ? nextTaskIndex : 'Complete!'
+    });
+  } catch (err) {
+    console.error('❌ ADAPTIVE TASK RECOMMENDATION:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ══════════════════════════════════════
    API — SUBMIT CODE
 ══════════════════════════════════════ */
@@ -483,6 +684,29 @@ app.post('/api/submit', async (req, res) => {
         hintUsed ? true : false  // pg uses true/false booleans (not 1/0)
       ]
     );
+
+    try {
+      const recommendationReward = finalCorrect
+        ? Math.max(100 - (Math.max(Number(attempts) || 1, 1) - 1) * 10 - Math.floor((Number(timeSpent) || 0) / 30) * 5, 20) / 100
+        : -0.1;
+      await db.query(
+        `UPDATE adaptive_task_recommendations
+         SET reward = COALESCE(reward, 0) + $1,
+             resolved_at = CASE WHEN $2 THEN NOW() ELSE resolved_at END
+         WHERE user_id = $3 AND language = $4 AND concept = $5
+           AND recommended_problem_id = $6 AND resolved_at IS NULL`,
+        [
+          recommendationReward,
+          finalCorrect,
+          String(userId),
+          language,
+          concept,
+          String(problemId)
+        ]
+      );
+    } catch (err) {
+      console.error('❌ Failed to update adaptive recommendation reward:', err.message);
+    }
 
     // ── 6. Upsert user_profiles ──────────────────────────────────
     // SUPABASE (pg): { rows } and $1–$3
@@ -734,6 +958,8 @@ app.post('/api/submit', async (req, res) => {
       syntaxErrors,
       structuralErrors,
       cfgFeedback,
+      structuralFeedback: cfgResult.structuralFeedback,
+      syntaxFeedback: cfgResult.syntaxFeedback,
       constructUsed,
       isMastered,
       recommendation: recommended
