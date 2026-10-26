@@ -349,6 +349,21 @@ const ConceptModal = ({ language, level, onSelect, onClose, progress = {}, justM
               </ul>
             </section>
 
+            <section className={styles.guidelinesSection} aria-labelledby="task-recommendations-title">
+              <h3 id="task-recommendations-title">Task Recommendations When You Struggle</h3>
+              <p>
+                After at least <strong>3 incorrect submissions</strong> and <strong>5 minutes</strong>
+                on the same task, a recommendation prompt appears. Choose <strong>Try another task</strong>
+                in that prompt to request a recommendation. The system selects an untried task
+                from the same concept, tier, and difficulty. The recommended task keeps the
+                number of the task it replaces; after you solve it, you continue to the next task.
+              </p>
+              <p>
+                After all new tasks at that level have been recommended, you can choose from
+                the tasks already offered at the same level to keep practicing.
+              </p>
+            </section>
+
             <div className={styles.guidelinesActions}>
               <button
                 className={styles.guidelinesBackBtn}

@@ -117,6 +117,7 @@ function App() {
   // Shape: { [language]: { [concept]: taskIndex } }
   const [savedTaskIndices, setSavedTaskIndices] = useState(() => readStoredTaskIndices(EMPTY_USER.id));
   const [savedTaskTiers, setSavedTaskTiers] = useState(() => readStoredTaskTiers(EMPTY_USER.id));
+  const [savedRecommendedTasks, setSavedRecommendedTasks] = useState({});
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
 
   const [userData, setUserData] = useState(EMPTY_USER);
@@ -177,6 +178,9 @@ function App() {
       return next;
     });
   };
+
+  const getRecommendedTaskKey = (lang, concept, userId) =>
+    JSON.stringify([userId || '', lang, concept]);
 
   const handleCompleteTask = (language, concept, taskId) => {
     setProgress(prev => {
@@ -455,6 +459,20 @@ function App() {
           language={selectedLang}
           concept={selectedConcept}
           level={selectedLevel}
+          initialSupportTask={savedRecommendedTasks[
+            getRecommendedTaskKey(selectedLang, selectedConcept, userData?.id)
+          ] || null}
+          onSupportTaskChange={recommendedTask => {
+            const key = getRecommendedTaskKey(selectedLang, selectedConcept, userData?.id);
+            setSavedRecommendedTasks(prev => {
+              if (!recommendedTask) {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+              }
+              return { ...prev, [key]: recommendedTask };
+            });
+          }}
           initialTier={savedTaskTiers?.[selectedLang]?.[selectedConcept] || 'Beginner'}
           onBack={(tier) => {
             // Save current task index before going back so we can resume

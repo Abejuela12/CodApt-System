@@ -13,7 +13,7 @@ const { isOutputMatch } = require('./utils/outputMatching');
 const { recommendExercise } = require('./utils/cosineSimilarity');
 const { CARTClassifier } = require('./utils/cartModel');
 const { getFallbackProblems, resolveProblemMetadata } = require('./utils/problemCatalog');
-const { selectAdaptiveTask } = require('./utils/adaptiveTaskRecommender');
+const { getNextTaskIndex, selectNextTask } = require('./utils/taskRecommender');
 const { startInteractiveSession, writeToInteractiveSession, getInteractiveSessionOutput, removeInteractiveSession } = require('./utils/runCode');
 
 // ─── Load CART model at startup ───────────────────────────────────
@@ -43,7 +43,7 @@ try {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-let adaptiveRecommendationsReady = false;
+let taskRecommendationExposuresReady = false;
 
 async function ensureArchivedColumn() {
   try {
@@ -57,45 +57,37 @@ async function ensureArchivedColumn() {
   }
 }
 
-async function ensureAdaptiveRecommendationsTable() {
-  if (adaptiveRecommendationsReady) return;
+async function ensureTaskRecommendationExposuresTable() {
+  if (taskRecommendationExposuresReady) return;
 
-  try {
-    await db.query(
-      `CREATE TABLE IF NOT EXISTS adaptive_task_recommendations (
-         id BIGSERIAL PRIMARY KEY,
-         user_id TEXT NOT NULL,
-         language TEXT NOT NULL,
-         concept TEXT NOT NULL,
-         source_problem_id TEXT NOT NULL,
-         recommended_problem_id TEXT NOT NULL,
-         context_key TEXT NOT NULL,
-         reward DOUBLE PRECISION,
-         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-         resolved_at TIMESTAMPTZ
-       )`
-    );
-    await db.query(
-      `CREATE INDEX IF NOT EXISTS adaptive_task_recommendations_context_idx
-       ON adaptive_task_recommendations (language, concept, context_key, recommended_problem_id)`
-    );
-    await db.query(
-      `CREATE INDEX IF NOT EXISTS adaptive_task_recommendations_user_idx
-       ON adaptive_task_recommendations (user_id, language, concept, recommended_problem_id)`
-    );
-    console.log('✅ ensured adaptive_task_recommendations table and indexes exist');
-    adaptiveRecommendationsReady = true;
-  } catch (err) {
-    console.error('❌ Failed to ensure adaptive recommendation storage:', err.message);
-    throw err;
-  }
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS task_recommendation_exposures (
+       user_id TEXT NOT NULL,
+       language TEXT NOT NULL,
+       concept TEXT NOT NULL,
+       problem_id TEXT NOT NULL,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       PRIMARY KEY (user_id, language, concept, problem_id)
+     )`
+  );
+  await db.query(
+    `DO $migration$
+     BEGIN
+       IF to_regclass('task_recommendation_cycle_history') IS NOT NULL THEN
+         EXECUTE 'INSERT INTO task_recommendation_exposures
+                    (user_id, language, concept, problem_id)
+                  SELECT DISTINCT user_id, language, concept, recommended_problem_id
+                  FROM task_recommendation_cycle_history
+                  ON CONFLICT (user_id, language, concept, problem_id) DO NOTHING';
+       END IF;
+     END;
+     $migration$`
+  );
+  taskRecommendationExposuresReady = true;
 }
 
 if (require.main === module) {
   ensureArchivedColumn();
-  ensureAdaptiveRecommendationsTable().catch(err => {
-    console.error('❌ Adaptive recommendation storage is unavailable:', err.message);
-  });
 }
 
 /* ─────────────────────────────────────
@@ -458,17 +450,11 @@ app.get('/api/completed-problems/:userId/:language/:concept', async (req, res) =
   }
 });
 
-app.post('/api/adaptive-task-recommendations', async (req, res) => {
+app.post('/api/task-recommendations', async (req, res) => {
   try {
-    await ensureAdaptiveRecommendationsTable();
+    await ensureTaskRecommendationExposuresTable();
 
-    const {
-      userId,
-      language,
-      concept,
-      sourceProblemId,
-      learnerState = {}
-    } = req.body || {};
+    const { userId, language, concept, sourceProblemId } = req.body || {};
     if (!userId || !language || !concept || sourceProblemId === undefined || sourceProblemId === null) {
       return res.status(400).json({ error: 'User, language, concept, and source task are required.' });
     }
@@ -495,107 +481,108 @@ app.post('/api/adaptive-task-recommendations', async (req, res) => {
       ? databaseTasks
       : getFallbackProblems({ language, concept });
 
-    const [{ rows: attemptedRows }, { rows: recommendedRows }] = await Promise.all([
+    const [{ rows: completedRows }, { rows: recommendedRows }] = await Promise.all([
       db.query(
         `SELECT DISTINCT problem_id
          FROM submissions
-         WHERE user_id = $1 AND language = $2 AND concept = $3`,
+         WHERE user_id = $1 AND language = $2 AND concept = $3 AND is_correct = true`,
         [userId, language, concept]
       ),
       db.query(
-        `SELECT DISTINCT recommended_problem_id
-         FROM adaptive_task_recommendations
+        `SELECT problem_id
+         FROM task_recommendation_exposures
          WHERE user_id = $1 AND language = $2 AND concept = $3`,
         [String(userId), language, concept]
       )
     ]);
-    const attemptedTaskIds = new Set(attemptedRows.map(row => String(row.problem_id)));
-    const recommendedTaskIds = new Set(recommendedRows.map(row => String(row.recommended_problem_id)));
-
-    const tierOrder = ['Beginner', 'Intermediate', 'Advanced'];
-    const difficultyOrder = ['Easy', 'Intermediate', 'Hard'];
-    const tier = learnerState.currentTier || source.problem_tier;
-    const difficulty = learnerState.currentDifficulty || source.difficulty;
-    const attempts = Math.max(0, Number(learnerState.attempts) || 0);
-    const elapsedSeconds = Math.max(0, Number(learnerState.elapsedSeconds) || 0);
-    let successRate = Number(learnerState.successRate);
-    if (!Number.isFinite(successRate)) successRate = 0;
-    if (successRate > 1) successRate /= 100;
-    successRate = Math.max(0, Math.min(1, successRate));
-
-    const contextKey = JSON.stringify({
-      tier: tierOrder.includes(tier) ? tier : source.problem_tier,
-      difficulty: difficultyOrder.includes(difficulty) ? difficulty : source.difficulty,
-      attempts: attempts >= 5 ? 'high' : 'low',
-      elapsed: elapsedSeconds >= 600 ? 'long' : 'medium',
-      success: successRate < 0.48 ? 'low' : successRate < 0.8 ? 'medium' : 'high'
-    });
-
+    const completedTaskIds = new Set(completedRows.map(row => String(row.problem_id)));
     await db.query(
-      `UPDATE adaptive_task_recommendations
-       SET reward = COALESCE(reward, 0) - 0.25, resolved_at = NOW()
-       WHERE user_id = $1 AND language = $2 AND concept = $3 AND resolved_at IS NULL`,
-      [String(userId), language, concept]
+      `INSERT INTO task_recommendation_exposures
+       (user_id, language, concept, problem_id)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, language, concept, problem_id) DO NOTHING`,
+      [String(userId), language, concept, String(source.id)]
     );
-
-    const { rows: rewardRows } = await db.query(
-      `SELECT recommended_problem_id, AVG(reward) AS mean_reward
-       FROM adaptive_task_recommendations
-       WHERE language = $1 AND concept = $2 AND context_key = $3 AND reward IS NOT NULL
-       GROUP BY recommended_problem_id`,
-      [language, concept, contextKey]
-    );
-    const meanRewards = new Map(rewardRows.map(row => [
-      String(row.recommended_problem_id),
-      Number(row.mean_reward)
-    ]));
-    const recommendedTask = selectAdaptiveTask({
+    recommendedRows.push({ problem_id: String(source.id) });
+    const recommendedTaskIds = new Set(recommendedRows.map(row =>
+      String(row.problem_id)
+    ));
+    const recommendation = selectNextTask({
       source,
       candidates,
-      attemptedTaskIds,
       recommendedTaskIds,
-      meanRewards
+      completedTaskIds
     });
 
-    if (!recommendedTask) {
+    if (!recommendation) {
       return res.status(404).json({
-        error: 'There are no other predefined tasks available in this concept.'
+        error: 'There are no tasks available at this task’s tier and difficulty in this concept.'
       });
     }
 
     const taskGroup = candidates.filter(candidate =>
-      candidate.problem_tier === recommendedTask.problem_tier &&
-      candidate.difficulty === recommendedTask.difficulty
+      candidate.problem_tier === source.problem_tier &&
+      candidate.difficulty === source.difficulty
     );
-    const taskIndex = taskGroup.findIndex(candidate =>
-      String(candidate.id) === String(recommendedTask.id)
-    );
-    const availableNextIndexes = taskGroup.flatMap((candidate, index) =>
-      String(candidate.id) !== String(source.id) &&
-      String(candidate.id) !== String(recommendedTask.id) &&
-      !attemptedTaskIds.has(String(candidate.id)) &&
-      !recommendedTaskIds.has(String(candidate.id))
-        ? [index]
-        : []
-    );
-    const nextTaskIndex = availableNextIndexes.find(index => index > taskIndex) ??
-      availableNextIndexes[0] ??
-      -1;
+    const buildRecommendationOption = task => {
+      const taskIndex = taskGroup.findIndex(candidate =>
+        String(candidate.id) === String(task.id)
+      );
+      const unavailableTaskIds = new Set([
+        ...recommendedTaskIds,
+        ...completedTaskIds,
+        String(source.id),
+        String(task.id)
+      ]);
+      const nextTaskIndex = getNextTaskIndex(
+        taskGroup,
+        taskIndex,
+        unavailableTaskIds
+      );
 
+      return {
+        task,
+        taskIndex,
+        nextTaskIndex
+      };
+    };
+
+    if (!recommendation.task) {
+      const options = recommendation.options.map(buildRecommendationOption);
+      await Promise.all(options.map(option => db.query(
+        `INSERT INTO task_recommendation_exposures
+         (user_id, language, concept, problem_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, language, concept, problem_id) DO NOTHING`,
+        [String(userId), language, concept, String(option.task.id)]
+      )));
+      return res.json({
+        selectionRequired: true,
+        message: `You’ve received all available new tasks at the ${source.problem_tier} / ${source.difficulty} level for ${concept}. Choose a task to keep practicing at this same level.`,
+        options
+      });
+    }
+
+    const recommendationOption = buildRecommendationOption(recommendation.task);
     await db.query(
-      `INSERT INTO adaptive_task_recommendations
-       (user_id, language, concept, source_problem_id, recommended_problem_id, context_key)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [String(userId), language, concept, String(source.id), String(recommendedTask.id), contextKey]
+      `INSERT INTO task_recommendation_exposures
+       (user_id, language, concept, problem_id)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, language, concept, problem_id) DO NOTHING`,
+      [
+        String(userId),
+        language,
+        concept,
+        String(recommendation.task.id)
+      ]
     );
 
     res.json({
-      task: recommendedTask,
-      taskIndex,
-      nextTaskIndex: nextTaskIndex >= 0 ? nextTaskIndex : 'Complete!'
+      ...recommendationOption,
+      selectionRequired: false
     });
   } catch (err) {
-    console.error('❌ ADAPTIVE TASK RECOMMENDATION:', err.message);
+    console.error('❌ TASK RECOMMENDATION:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -624,10 +611,12 @@ app.post('/api/submit', async (req, res) => {
     }
     const requiredConstruct = problem.required_construct || null;
     const expectedOutput = problem.expected_output || '';
+    const validationLanguage = problem.language || language;
+    const validationConcept = problem.concept || concept;
 
     // ── 2. CFG validation ────────────────────────────────────────
-    const cfgResult = validateCFG(code, language, requiredConstruct, expectedOutput, {
-      concept,
+    const cfgResult = validateCFG(code, validationLanguage, requiredConstruct, expectedOutput, {
+      concept: validationConcept,
       instruction: problem.instruction || ''
     });
     const syntaxErrors = cfgResult.syntaxErrors;
@@ -684,29 +673,6 @@ app.post('/api/submit', async (req, res) => {
         hintUsed ? true : false  // pg uses true/false booleans (not 1/0)
       ]
     );
-
-    try {
-      const recommendationReward = finalCorrect
-        ? Math.max(100 - (Math.max(Number(attempts) || 1, 1) - 1) * 10 - Math.floor((Number(timeSpent) || 0) / 30) * 5, 20) / 100
-        : -0.1;
-      await db.query(
-        `UPDATE adaptive_task_recommendations
-         SET reward = COALESCE(reward, 0) + $1,
-             resolved_at = CASE WHEN $2 THEN NOW() ELSE resolved_at END
-         WHERE user_id = $3 AND language = $4 AND concept = $5
-           AND recommended_problem_id = $6 AND resolved_at IS NULL`,
-        [
-          recommendationReward,
-          finalCorrect,
-          String(userId),
-          language,
-          concept,
-          String(problemId)
-        ]
-      );
-    } catch (err) {
-      console.error('❌ Failed to update adaptive recommendation reward:', err.message);
-    }
 
     // ── 6. Upsert user_profiles ──────────────────────────────────
     // SUPABASE (pg): { rows } and $1–$3

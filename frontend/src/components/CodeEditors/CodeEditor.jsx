@@ -169,7 +169,8 @@ const CodeEditor = ({
   language, concept, level,
   onBack, onProfileClick, onHomeClick, onLogout,
   onCompleteTask, userData, progress = {}, currentTaskIndex, onNextTask,
-  initialTier = 'Beginner', onTierChange
+  initialTier = 'Beginner', onTierChange, initialSupportTask = null,
+  onSupportTaskChange
 }) => {
   const [code, setCode]           = useState('');
   const [tasks, setTasks]         = useState([]);
@@ -187,7 +188,8 @@ const CodeEditor = ({
   const [showDifficultySupport, setShowDifficultySupport] = useState(false);
   const [isLoadingEasierTask, setIsLoadingEasierTask] = useState(false);
   const [easierTaskError, setEasierTaskError] = useState('');
-  const [supportTask, setSupportTask] = useState(null);
+  const [supportTask, setSupportTask] = useState(initialSupportTask);
+  const [recommendationOptions, setRecommendationOptions] = useState([]);
   const [currentDifficulty, setCurrentDifficulty] = useState(level);
   const [failedSubmissionCount, setFailedSubmissionCount] = useState(0);
   const [showMastery, setShowMastery]       = useState(false);
@@ -201,9 +203,14 @@ const CodeEditor = ({
   const startTimeRef = useRef(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [timeSpent, setTimeSpent] = useState(0);
+  const completedTaskIndexRef = useRef(null);
   const supportSnapshotRef = useRef(null);
+  const supportTaskStackRef = useRef([]);
+  const previousRecommendedTaskRef = useRef(null);
+  const pendingSupportTaskRestoreRef = useRef(null);
+  const activeSupportTaskIdRef = useRef(null);
   const wasSupportTaskRef = useRef(false);
-  const handledRecommendationTaskIdsRef = useRef(new Set());
+  const promptedRecommendationTaskIdsRef = useRef(new Map());
   const [hintLevel, setHintLevel] = useState(0);
   const [hintUsed, setHintUsed]   = useState(false);
   const [showHint, setShowHint]   = useState(false);
@@ -240,6 +247,44 @@ const CodeEditor = ({
   const getTaskIdentity = current =>
     `${language}:${concept}:${current?.id ?? currentTaskIndex}`;
 
+  const captureTaskSnapshot = () => ({
+    code,
+    output,
+    elapsedSeconds: Math.floor((Date.now() - startTimeRef.current) / 1000),
+    attempts,
+    failedSubmissionCount,
+    timeSpent,
+    hintLevel,
+    hintUsed,
+    showHint
+  });
+
+  const activateRecommendedTask = recommendationData => {
+    promptedRecommendationTaskIdsRef.current.delete(
+      getTaskIdentity(recommendationData.task)
+    );
+    const snapshot = captureTaskSnapshot();
+    previousRecommendedTaskRef.current = null;
+    if (supportTask) {
+      supportTaskStackRef.current.push({ task: supportTask, snapshot });
+    } else {
+      supportSnapshotRef.current = snapshot;
+    }
+
+    const nextSupportTask = {
+      ...recommendationData.task,
+      _candidateTier: recommendationData.task.problem_tier,
+      _candidateDifficulty: recommendationData.task.difficulty,
+      _candidateTaskIndex: recommendationData.taskIndex,
+      _nextTaskIndex: recommendationData.nextTaskIndex
+    };
+    setSupportTask(nextSupportTask);
+    onSupportTaskChange?.(nextSupportTask);
+    setRecommendationOptions([]);
+    setShowDifficultySupport(false);
+    setShowAssessment(false);
+  };
+
   const handleTryEasierTask = async () => {
     if (!task || isLoadingEasierTask) return;
 
@@ -250,59 +295,46 @@ const CodeEditor = ({
         throw new Error('Log in to get a personalized task recommendation.');
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/adaptive-task-recommendations`, {
+      const response = await fetch(`${API_BASE_URL}/api/task-recommendations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: userData.id,
           language,
           concept,
-          sourceProblemId: task.id,
-          learnerState: {
-            currentTier: task.problem_tier || currentTier,
-            currentDifficulty: task.difficulty || currentDifficulty,
-            attempts,
-            elapsedSeconds: Math.floor((Date.now() - startTimeRef.current) / 1000),
-            successRate: progress?.[language]?.[concept]?.successRate ?? 0
-          }
+          sourceProblemId: task.id
         })
       });
       const recommendationData = await response.json();
       if (!response.ok) {
         throw new Error(recommendationData?.error || `Could not get a task recommendation (HTTP ${response.status}).`);
       }
-      if (
-        !recommendationData?.task ||
-        String(recommendationData.task.concept) !== String(concept) ||
-        String(recommendationData.task.language) !== String(language) ||
-        !Number.isInteger(recommendationData.taskIndex) ||
-        !(Number.isInteger(recommendationData.nextTaskIndex) || recommendationData.nextTaskIndex === 'Complete!')
-      ) {
-        throw new Error('The server returned an invalid task recommendation.');
-      }
+      const isValidOption = option =>
+        option?.task &&
+        String(option.task.concept) === String(concept) &&
+        String(option.task.language) === String(language) &&
+        String(option.task.problem_tier) === String(task.problem_tier) &&
+        String(option.task.difficulty) === String(task.difficulty) &&
+        Number.isInteger(option.taskIndex) &&
+        (Number.isInteger(option.nextTaskIndex) || option.nextTaskIndex === 'Complete!');
 
-      supportSnapshotRef.current = {
-        code,
-        output,
-        elapsedSeconds: Math.floor((Date.now() - startTimeRef.current) / 1000),
-        attempts,
-        failedSubmissionCount,
-        timeSpent,
-        hintLevel,
-        hintUsed,
-        showHint
-      };
-      setSupportTask({
-        ...recommendationData.task,
-        _candidateTier: recommendationData.task.problem_tier,
-        _candidateDifficulty: recommendationData.task.difficulty,
-        _candidateTaskIndex: recommendationData.taskIndex,
-        _nextTaskIndex: recommendationData.nextTaskIndex
-      });
-      setShowDifficultySupport(false);
-      setShowAssessment(false);
+      if (recommendationData?.selectionRequired === true) {
+        if (
+          !Array.isArray(recommendationData.options) ||
+          recommendationData.options.length === 0 ||
+          !recommendationData.options.every(isValidOption)
+        ) {
+          throw new Error('The server returned invalid same-level task choices.');
+        }
+        setRecommendationOptions(recommendationData.options);
+      } else {
+        if (!isValidOption(recommendationData)) {
+          throw new Error('The server returned an invalid task recommendation.');
+        }
+        activateRecommendedTask(recommendationData);
+      }
     } catch (error) {
-      console.error('Failed to get an adaptive task recommendation:', error);
+      console.error('Failed to get a task recommendation:', error);
       setEasierTaskError(error.message || 'Could not get a task recommendation. Please try again.');
     } finally {
       setIsLoadingEasierTask(false);
@@ -310,7 +342,35 @@ const CodeEditor = ({
   };
 
   const returnToOriginalTask = () => {
-    setSupportTask(null);
+    const currentSupportSnapshot = captureTaskSnapshot();
+    const previousSupportTask = supportTaskStackRef.current.pop();
+    if (previousSupportTask) {
+      pendingSupportTaskRestoreRef.current = previousSupportTask.snapshot;
+      setSupportTask(previousSupportTask.task);
+      onSupportTaskChange?.(previousSupportTask.task);
+    } else {
+      previousRecommendedTaskRef.current = {
+        task: supportTask,
+        snapshot: currentSupportSnapshot
+      };
+      setSupportTask(null);
+      onSupportTaskChange?.(null);
+    }
+    setRecommendationOptions([]);
+    setShowAssessment(false);
+  };
+
+  const returnToRecommendedTask = () => {
+    const previousRecommendation = previousRecommendedTaskRef.current;
+    if (!previousRecommendation) return;
+
+    supportSnapshotRef.current = captureTaskSnapshot();
+    pendingSupportTaskRestoreRef.current = previousRecommendation.snapshot;
+    previousRecommendedTaskRef.current = null;
+    setSupportTask(previousRecommendation.task);
+    onSupportTaskChange?.(previousRecommendation.task);
+    setRecommendationOptions([]);
+    setShowDifficultySupport(false);
     setShowAssessment(false);
   };
 
@@ -325,17 +385,28 @@ const CodeEditor = ({
   }, [task]);
 
   useEffect(() => {
-    if (!task || supportTask || showAssessment || failedSubmissionCount < 1) return;
+    if (
+      !task ||
+      showAssessment ||
+      failedSubmissionCount < 1 ||
+      (supportTask && activeSupportTaskIdRef.current !== String(supportTask.id))
+    ) return;
 
     const taskIdentity = getTaskIdentity(task);
-    if (handledRecommendationTaskIdsRef.current.has(taskIdentity)) return;
+    const lastPromptedSubmissionCount =
+      promptedRecommendationTaskIdsRef.current.get(taskIdentity) || 0;
 
-    if (failedSubmissionCount >= 3 && elapsedSeconds >= 300) {
-      handledRecommendationTaskIdsRef.current.add(taskIdentity);
+    if (
+      failedSubmissionCount >= 3 &&
+      elapsedSeconds >= 300 &&
+      failedSubmissionCount > lastPromptedSubmissionCount
+    ) {
+      promptedRecommendationTaskIdsRef.current.set(taskIdentity, failedSubmissionCount);
       setEasierTaskError('');
+      setRecommendationOptions([]);
       setShowDifficultySupport(true);
     }
-  }, [task, supportTask, showAssessment, failedSubmissionCount, elapsedSeconds]);
+  }, [task, showAssessment, failedSubmissionCount, elapsedSeconds]);
 
   const handleRun = async () => {
     if (isRunning) return;
@@ -573,7 +644,7 @@ const CodeEditor = ({
       if (!isCorrect) {
         feedback.push(`Expected: "${expected}"`);
         feedback.push(`Your output: "${actual}"`);
-      } else {
+      } else if (finalCorrect) {
         feedback.push('✔ Output matches the expected result.');
       }
 
@@ -620,11 +691,7 @@ const CodeEditor = ({
           onTierChange?.(nextTier);
           onCompleteTask(language, concept, currentTaskIndex + 1);
         } else {
-          onCompleteTask(
-            language,
-            concept,
-            Math.max(currentTaskIndex, supportTask._candidateTaskIndex) + 1
-          );
+          onCompleteTask(language, concept, currentTaskIndex + 1);
         }
       }
 
@@ -677,9 +744,54 @@ const CodeEditor = ({
   }, [language, concept, currentDifficulty, currentTier]);
 
   useEffect(() => {
+    if (tasksLoading || supportTask || tasks.length === 0) return;
+
+    if (currentTaskIndex < tasks.length) {
+      completedTaskIndexRef.current = null;
+      return;
+    }
+
+    const completionKey = `${language}:${concept}:${currentTier}:${currentDifficulty}:${currentTaskIndex}`;
+    if (completedTaskIndexRef.current === completionKey) return;
+    completedTaskIndexRef.current = completionKey;
+    onNextTask?.('Complete!', concept, true);
+  }, [
+    tasksLoading,
+    tasks,
+    supportTask,
+    currentTaskIndex,
+    language,
+    concept,
+    currentTier,
+    currentDifficulty,
+    onNextTask
+  ]);
+
+  useEffect(() => {
     if (!task) return;
     if (supportTask) {
       wasSupportTaskRef.current = true;
+      activeSupportTaskIdRef.current = String(supportTask.id);
+      const snapshot = pendingSupportTaskRestoreRef.current;
+      if (snapshot) {
+        pendingSupportTaskRestoreRef.current = null;
+        setCode(snapshot.code);
+        setOutput(snapshot.output);
+        setTerminalSessionId(null);
+        terminalSessionIdRef.current = null;
+        setTerminalStatus('idle');
+        terminalBufferRef.current = '';
+        setAttempts(snapshot.attempts);
+        setFailedSubmissionCount(snapshot.failedSubmissionCount);
+        setTimeSpent(snapshot.timeSpent);
+        startTimeRef.current = Date.now() - snapshot.elapsedSeconds * 1000;
+        setElapsedSeconds(snapshot.elapsedSeconds);
+        setShowHint(snapshot.showHint);
+        setHintLevel(snapshot.hintLevel);
+        setHintUsed(snapshot.hintUsed);
+        if (xtermRef.current) xtermRef.current.clear();
+        return;
+      }
       setCode(getStarterCode(language, task));
       setOutput('');
       setTerminalSessionId(null);
@@ -701,6 +813,7 @@ const CodeEditor = ({
     if (wasSupportTaskRef.current && supportSnapshotRef.current) {
       const snapshot = supportSnapshotRef.current;
       wasSupportTaskRef.current = false;
+      activeSupportTaskIdRef.current = null;
       supportSnapshotRef.current = null;
       setCode(snapshot.code);
       setOutput(snapshot.output);
@@ -792,6 +905,7 @@ const CodeEditor = ({
 
   const displayLevel = mapLevelLabel(assessmentResult.level);
   const levelColors  = getLevelColors(assessmentResult.level);
+  const isExecutionActive = isRunning || terminalStatus === 'running';
   const canReviewSubmittedTask = assessmentResult.correct &&
     previousTaskReview?.taskId === String(task?.id);
 
@@ -812,21 +926,33 @@ const CodeEditor = ({
     if (supportTask) {
       if (!assessmentResult.correct) return;
       const completedSupportTask = supportTask;
-      const nextIndex = completedSupportTask._nextTaskIndex === 'Complete!'
-        ? 'Complete!'
-        : Math.max(
-            Number(completedSupportTask._nextTaskIndex),
-            currentTaskIndex + 1,
-            completedSupportTask._candidateTaskIndex + 1
-          );
+      const nextTasks = [...tasks];
+      const recommendedTaskIndex = nextTasks.findIndex(candidate =>
+        String(candidate.id) === String(completedSupportTask.id)
+      );
+      if (recommendedTaskIndex >= 0 && recommendedTaskIndex !== currentTaskIndex) {
+        const replacedTask = nextTasks[currentTaskIndex];
+        nextTasks[currentTaskIndex] = nextTasks[recommendedTaskIndex];
+        nextTasks[recommendedTaskIndex] = replacedTask;
+      }
+      nextTasks[currentTaskIndex] = completedSupportTask;
       supportSnapshotRef.current = null;
+      supportTaskStackRef.current = [];
+      pendingSupportTaskRestoreRef.current = null;
       wasSupportTaskRef.current = false;
       setSupportTask(null);
+      onSupportTaskChange?.(null);
       setShowAssessment(false);
       setCurrentTier(completedSupportTask._candidateTier);
       setCurrentDifficulty(completedSupportTask._candidateDifficulty);
       onTierChange?.(completedSupportTask._candidateTier);
-      onNextTask?.(nextIndex, concept, assessmentResult.isMastered === true);
+      setTasks(nextTasks);
+      const nextTaskIndex = currentTaskIndex + 1;
+      if (nextTaskIndex < nextTasks.length) {
+        onNextTask?.(nextTaskIndex);
+      } else {
+        onNextTask?.('Complete!', concept, assessmentResult.isMastered === true);
+      }
       return;
     }
     if (!assessmentResult.correct || typeof assessmentResult.nextTaskIndex !== 'number') return;
@@ -946,6 +1072,14 @@ const CodeEditor = ({
                         Back to current task
                       </button>
                     )}
+                    {!supportTask && previousRecommendedTaskRef.current && (
+                      <button
+                        onClick={returnToRecommendedTask}
+                        style={{ padding:'4px 9px', borderRadius:'6px', backgroundColor:'#172554', border:'1px solid #60a5fa', color:'#dbeafe', fontSize:'11px', cursor:'pointer', whiteSpace:'nowrap' }}
+                      >
+                        Back to recommended task
+                      </button>
+                    )}
                     <span
                       role="timer"
                       aria-label={`Time on task ${formatElapsedTime(elapsedSeconds)}`}
@@ -972,9 +1106,9 @@ const CodeEditor = ({
                     onChange={val => setCode(val || '')}
                   />
                   <div style={{ position:'absolute', bottom:'16px', right:'16px', display:'flex', gap:'12px', zIndex:10 }}>
-                    <button onClick={handleRun} disabled={isRunning} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                      style={{ ...btnBase, backgroundColor: isRunning ? '#6b7280' : '#facc15', color:'black' }}>
-                      {isRunning ? '⏳ Running...' : '▶ RUN'}
+                    <button onClick={handleRun} disabled={isExecutionActive} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+                      style={{ ...btnBase, backgroundColor: isExecutionActive ? '#6b7280' : '#facc15', color:'black' }}>
+                      {isExecutionActive ? '⏳ Running...' : '▶ RUN'}
                     </button>
                     <button onClick={handleSubmit} disabled={isSubmitting} onMouseEnter={btnHover} onMouseLeave={btnLeave}
                       style={{ ...btnBase, backgroundColor: isSubmitting ? '#6b7280' : '#3b82f6', color:'white' }}>
@@ -1005,7 +1139,7 @@ const CodeEditor = ({
         </button>
       </footer>
 
-      {showDifficultySupport && !showAssessment && !supportTask && (
+      {showDifficultySupport && !showAssessment && (
         <div
           role="presentation"
           style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.68)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1100, padding:'16px' }}
@@ -1020,8 +1154,26 @@ const CodeEditor = ({
               Need a different task?
             </h2>
             <p style={{ margin:'0 0 18px', fontSize:'14px', lineHeight:'1.6', color:'#cbd5e1' }}>
-              It seems this task is taking some effort. We’ll recommend an unsolved task from {concept}—preferably an easier one, or another task at the same level if no easier option is available.
+              It seems this task is taking some effort. We’ll recommend an untried task from {concept} at the same {task?.problem_tier} tier and {task?.difficulty} difficulty.
             </p>
+            {recommendationOptions.length > 0 && (
+              <div style={{ marginBottom:'18px' }}>
+                <p style={{ margin:'0 0 10px', color:'#fcd34d', fontSize:'13px', lineHeight:'1.5' }}>
+                  You’ve tried all the new tasks at this level. Choose any task below to keep practicing.
+                </p>
+                <div style={{ display:'grid', gap:'8px', maxHeight:'240px', overflowY:'auto' }}>
+                  {recommendationOptions.map(option => (
+                    <button
+                      key={String(option.task.id)}
+                      onClick={() => activateRecommendedTask(option)}
+                      style={{ padding:'10px 12px', borderRadius:'8px', border:'1px solid #475569', backgroundColor:'#1e293b', color:'#e2e8f0', textAlign:'left', cursor:'pointer' }}
+                    >
+                      {option.task.title || `Task ${option.taskIndex + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {easierTaskError && (
               <p role="alert" style={{ margin:'0 0 16px', color:'#fca5a5', fontSize:'13px', lineHeight:'1.5' }}>
                 {easierTaskError}
@@ -1029,19 +1181,24 @@ const CodeEditor = ({
             )}
             <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', flexWrap:'wrap' }}>
               <button
-                onClick={() => setShowDifficultySupport(false)}
+                onClick={() => {
+                  setRecommendationOptions([]);
+                  setShowDifficultySupport(false);
+                }}
                 disabled={isLoadingEasierTask}
                 style={{ padding:'9px 14px', borderRadius:'8px', border:'1px solid #475569', backgroundColor:'#1e293b', color:'#e2e8f0', fontWeight:'600', cursor:isLoadingEasierTask ? 'not-allowed' : 'pointer' }}
               >
                 I’ll keep trying
               </button>
-              <button
-                onClick={handleTryEasierTask}
-                disabled={isLoadingEasierTask}
-                style={{ padding:'9px 14px', borderRadius:'8px', border:'none', backgroundColor:isLoadingEasierTask ? '#64748b' : '#3b82f6', color:'white', fontWeight:'700', cursor:isLoadingEasierTask ? 'wait' : 'pointer' }}
-              >
-                {isLoadingEasierTask ? 'Finding a task…' : 'Try another task'}
-              </button>
+              {recommendationOptions.length === 0 && (
+                <button
+                  onClick={handleTryEasierTask}
+                  disabled={isLoadingEasierTask}
+                  style={{ padding:'9px 14px', borderRadius:'8px', border:'none', backgroundColor:isLoadingEasierTask ? '#64748b' : '#3b82f6', color:'white', fontWeight:'700', cursor:isLoadingEasierTask ? 'wait' : 'pointer' }}
+                >
+                  {isLoadingEasierTask ? 'Finding a task…' : 'Try another task'}
+                </button>
+              )}
             </div>
           </section>
         </div>

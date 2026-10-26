@@ -579,6 +579,33 @@ assert.strictEqual(
 console.log('PASS: Python isOnline task accepts the required variable');
 
 const ageIfElseInstruction = 'Declare an integer variable called age with the value 18. Use if-else to print "adult" when age is greater than or equal to 18.';
+const javaAgeVariableNameMismatch = validateCFG(
+  'int Age = 20;\nif (Age >= 18) {\n    System.out.println("You are an adult.");\n}',
+  'Java',
+  'if',
+  'You are an adult.',
+  {
+    concept: 'Conditionals',
+    instruction: 'Declare an int variable called age with the value 20. Write an if statement that prints "You are an adult." if age is greater than or equal to 18.'
+  }
+);
+assert.strictEqual(
+  javaAgeVariableNameMismatch.constructUsed,
+  false,
+  'Java conditional must reject a variable whose casing differs from the instructed name'
+);
+assert.strictEqual(
+  javaAgeVariableNameMismatch.structuralErrors,
+  1,
+  'Java conditional name mismatch should produce one structural error'
+);
+assert.deepStrictEqual(
+  javaAgeVariableNameMismatch.structuralFeedback,
+  ['⚠ Variable name mismatch. Please follow the variable names in the instructions.'],
+  'Java conditional name mismatch should explain the actual issue without unrelated feedback'
+);
+console.log('PASS: Java conditional reports instructed variable-name mismatch');
+
 const ageIfElseCases = [
   {
     name: 'reject Python conditional that uses a literal instead of the declared variable',
@@ -697,6 +724,64 @@ assert.strictEqual(
   'Python Data Types task accepts the instructed variable assignments'
 );
 console.log('PASS: Python Data Types task accepts instructed variable assignments');
+
+const pythonCaseSensitiveNameInstruction = 'Declare a variable called name with the value "John". Then print it.';
+const pythonIncorrectVariableCase = validateCFG(
+  'Name = "John"\nprint(Name)',
+  'Python',
+  null,
+  'John',
+  { concept: 'Variables', instruction: pythonCaseSensitiveNameInstruction }
+);
+assert.strictEqual(
+  pythonIncorrectVariableCase.constructUsed,
+  false,
+  'Python variable names must match the exact casing required by the instruction'
+);
+assert.strictEqual(
+  pythonIncorrectVariableCase.structuralErrors,
+  1,
+  'A Python variable-name case mismatch should produce one structural error'
+);
+assert(
+  pythonIncorrectVariableCase.structuralFeedback.includes(
+    '⚠ Variable name mismatch. Please follow the variable names in the instructions.'
+  ),
+  'Python variable-name feedback should use a concise mismatch message'
+);
+assert.strictEqual(
+  pythonIncorrectVariableCase.structuralFeedback.length,
+  1,
+  'A Python variable-name case mismatch should not produce unrelated generic structural feedback'
+);
+console.log('PASS: Python variable names must match instructed casing with concise feedback');
+
+const javaVariableNameCaseMismatch = validateCFG(
+  'double Celsius = 25.0;\ndouble Fahrenheit = Celsius * 9.0 / 5.0 + 32.0;\nSystem.out.println(Fahrenheit);',
+  'Java',
+  null,
+  '77.0',
+  {
+    concept: 'Variables',
+    instruction: 'Declare a double variable called celsius with the value 25.0. Convert it to Fahrenheit using the formula and store the result in a variable called fahrenheit. Print fahrenheit.'
+  }
+);
+assert.strictEqual(
+  javaVariableNameCaseMismatch.constructUsed,
+  false,
+  'Java variable names must match the exact casing required by the instruction'
+);
+assert.strictEqual(
+  javaVariableNameCaseMismatch.structuralErrors,
+  1,
+  'A Java variable-name case mismatch should produce one structural error'
+);
+assert.deepStrictEqual(
+  javaVariableNameCaseMismatch.structuralFeedback,
+  ['⚠ Variable name mismatch. Please follow the variable names in the instructions.'],
+  'Java variable-name mismatch should give concise, relevant feedback only'
+);
+console.log('PASS: Java variable names must match instructed casing with concise feedback');
 
 const pythonLogicalOperatorsInstruction = 'Declare a variable age = 20. Print age >= 18 and age <= 65 on the first line, age < 13 or age > 60 on the second line, and not age == 20 on the third line.';
 const pythonLogicalOperatorsPrintOnly = validateCFG(

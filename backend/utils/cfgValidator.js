@@ -230,6 +230,21 @@ function validateJavaVariables(code, instruction) {
   }
 
   const source = stripComments(code, 'java');
+  const declaredNames = [...source.matchAll(/\b(?:String|int|double)\s+([A-Za-z_$][\w$]*)\s*=/g)]
+    .map(match => match[1]);
+  const nameMismatch = [...parsed.declarations, ...parsed.derivedNames.map(name => ({ name }))]
+    .some(({ name }) =>
+      !declaredNames.includes(name) &&
+      declaredNames.some(declaredName => declaredName.toLowerCase() === name.toLowerCase())
+    );
+  if (nameMismatch) {
+    return {
+      valid: false,
+      nameMismatch: true,
+      feedback: ['⚠ Variable name mismatch. Please follow the variable names in the instructions.']
+    };
+  }
+
   const declarationMissing = parsed.declarations.some(({ type, name, value }) => {
     const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(`\\b${type}\\s+${name}\\s*=\\s*${escapedValue}\\s*;`);
@@ -247,6 +262,7 @@ function validateJavaVariables(code, instruction) {
 
   return {
     valid: !declarationMissing && !reassigned && !derivedMissing,
+    nameMismatch: false,
     feedback: reassigned
       ? ['⚠ This task requires initializing each instructed variable once; do not assign another value to it before printing.']
       : !declarationMissing && !derivedMissing
@@ -374,6 +390,25 @@ function validatePythonRequiredAssignments(code, instruction) {
   });
 }
 
+function findPythonVariableNameMismatch(code, instruction) {
+  const requiredAssignments = parsePythonRequiredAssignments(instruction);
+  if (requiredAssignments.length === 0) return null;
+
+  const assignedNames = stripComments(code, 'python').split('\n')
+    .map(line => line.match(/^\s*([A-Za-z_]\w*)\s*=(?!=)/)?.[1])
+    .filter(Boolean);
+
+  for (const { name } of requiredAssignments) {
+    if (assignedNames.includes(name)) continue;
+    const mismatchedName = assignedNames.find(assignedName =>
+      assignedName.toLowerCase() === name.toLowerCase()
+    );
+    if (mismatchedName) return { expectedName: name, actualName: mismatchedName };
+  }
+
+  return null;
+}
+
 function parseJavaScriptRequiredDeclarations(instruction) {
   const declarations = [];
   const valuePattern = '("(?:\\\\.|[^"\\\\])*"|\\\'(?:\\\\.|[^\\\'\\\\])*\\\'|[A-Za-z_$][\\w$]*\\s*\\([^;\\n]*?\\)|-?\\d+(?:\\.\\d+)?|true|false|null)';
@@ -392,6 +427,23 @@ function parseJavaScriptRequiredDeclarations(instruction) {
   }
 
   return declarations;
+}
+
+function findJavaScriptVariableNameMismatch(code, instruction) {
+  const expectedNames = parseInstructionVariableNames(instruction);
+  if (expectedNames.length === 0) return null;
+
+  const source = stripComments(code, 'javascript');
+  const declaredNames = [...source.matchAll(/\b(?:let|const|var)\s+([A-Za-z_$][\w$]*)\s*(?:=|;)/g)]
+    .map(match => match[1]);
+
+  const missingName = expectedNames.find(name => !declaredNames.includes(name));
+  if (!missingName) return null;
+
+  return {
+    expectedName: missingName,
+    actualName: declaredNames[0] || 'the declared variable'
+  };
 }
 
 function validateJavaScriptRequiredDeclarations(code, instruction) {
@@ -548,6 +600,32 @@ function parseInstructionVariableNames(instruction) {
   }
 
   return [...names];
+}
+
+function hasInstructedVariableNameCaseMismatch(code, language, instruction) {
+  const expectedNames = parseInstructionVariableNames(instruction);
+  if (expectedNames.length === 0) return false;
+
+  const normalizedLanguage = (language || '').toLowerCase();
+  const source = stripComments(code, normalizedLanguage);
+  let declaredNames = [];
+
+  if (normalizedLanguage === 'java') {
+    declaredNames = [...source.matchAll(/\b(?:String|int|double|float|boolean|char|long|short|byte)\s+([A-Za-z_$][\w$]*)\s*(?:=|;)/g)]
+      .map(match => match[1]);
+  } else if (normalizedLanguage === 'javascript') {
+    declaredNames = [...source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)]
+      .map(match => match[1]);
+  } else if (normalizedLanguage === 'python') {
+    declaredNames = source.split('\n')
+      .map(line => line.match(/^\s*([A-Za-z_]\w*)\s*=(?!=)/)?.[1])
+      .filter(Boolean);
+  }
+
+  return expectedNames.some(expectedName =>
+    !declaredNames.includes(expectedName) &&
+    declaredNames.some(declaredName => declaredName.toLowerCase() === expectedName.toLowerCase())
+  );
 }
 
 function usesDeclaredVariableInIfCondition(code, language, instruction) {
@@ -755,6 +833,8 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
     new RegExp(`\\b${requiredConstruct}\\b`, 'i').test(normalizedInstruction);
   const enforcedConstruct = instructionRequiresDeclarationKeyword ? requiredConstruct : null;
   let constructUsed = isConstructUsed(code, language, enforcedConstruct);
+  let instructedVariableNameMismatch =
+    hasInstructedVariableNameCaseMismatch(code, language, context.instruction || '');
 
   if (enforcedConstruct && !constructUsed) {
     structuralErrors++;
@@ -778,6 +858,7 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
 
   if (language === 'Java' && context.concept === 'Variables') {
     const javaVariablesResult = validateJavaVariables(code, context.instruction || '');
+    instructedVariableNameMismatch ||= javaVariablesResult.nameMismatch === true;
     if (!javaVariablesResult.valid) {
       constructUsed = false;
       structuralErrors++;
@@ -787,6 +868,7 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
 
   if (
     (language || '').toLowerCase() === 'java' &&
+    !instructedVariableNameMismatch &&
     !validateJavaRequiredPrintExpressions(code, context.instruction || '')
   ) {
     constructUsed = false;
@@ -798,14 +880,20 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
     const instruction = context.instruction || '';
     const assignmentsValid = validatePythonRequiredAssignments(code, instruction);
     const printExpressionsValid = validatePythonRequiredPrintExpressions(code, instruction);
+    instructedVariableNameMismatch ||= !assignmentsValid &&
+      Boolean(findPythonVariableNameMismatch(code, instruction));
     if (!assignmentsValid || !printExpressionsValid) {
       constructUsed = false;
       structuralErrors++;
-      feedback.push(
-        !assignmentsValid
-          ? '⚠ This task requires assigning the instructed values and results to their named variables.'
-          : '⚠ This task requires printing the expressions specified in the instructions.'
-      );
+      if (instructedVariableNameMismatch) {
+        feedback.push('⚠ Variable name mismatch. Please follow the variable names in the instructions.');
+      } else {
+        feedback.push(
+          !assignmentsValid
+            ? '⚠ This task requires assigning the instructed values and results to their named variables.'
+            : '⚠ This task requires printing the expressions specified in the instructions.'
+        );
+      }
     }
   }
 
@@ -841,10 +929,17 @@ function validateCFG(code, language, requiredConstruct, expectedOutput, context 
   ) {
     constructUsed = false;
     structuralErrors++;
-    feedback.push('⚠ This task requires using the instructed variable in the if condition, not replacing it with a literal value.');
+    feedback.push(
+      instructedVariableNameMismatch
+        ? '⚠ Variable name mismatch. Please follow the variable names in the instructions.'
+        : '⚠ This task requires using the instructed variable in the if condition, not replacing it with a literal value.'
+    );
   }
 
-  if (!validatesPrintedDeclaredVariables(code, language, context.instruction || '')) {
+  if (
+    !instructedVariableNameMismatch &&
+    !validatesPrintedDeclaredVariables(code, language, context.instruction || '')
+  ) {
     constructUsed = false;
     structuralErrors++;
     feedback.push('⚠ This task requires printing the instructed variable, not a hardcoded value.');
